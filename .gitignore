@@ -1,8 +1,0 @@
-# Node.js dependencies installed by npm (regenerable from package.json + package-lock.json)
-node_modules/
-
-# npm debug/log output
-npm-debug.log*
-
-# Optional npm cache directory
-.npm
