@@ -13,6 +13,13 @@ app.get('/good-evening', (req, res) => {
   res.type('text/plain').send('Good evening\n');
 });
 
-app.listen(port, hostname, () => {
-  console.log(`Server running at http://${hostname}:${port}/`);
+const server = app.listen(port, hostname, () => {
+  if (server.listening) {
+    console.log(`Server running at http://${hostname}:${port}/`);
+  }
+});
+
+server.on('error', (err) => {
+  console.error(`Failed to start server: ${err.message}`);
+  process.exit(1);
 });
