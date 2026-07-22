@@ -13,6 +13,10 @@ app.get('/good-evening', (req, res) => {
   res.type('text/plain').send('Good evening\n');
 });
 
+app.get('/good-morning', (req, res) => {
+  res.type('text/plain').send('Good morning\n');
+});
+
 const server = app.listen(port, hostname, () => {
   if (server.listening) {
     console.log(`Server running at http://${hostname}:${port}/`);
