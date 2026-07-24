@@ -1,14 +1,54 @@
-const http = require('http');
+/**
+ * Express tutorial server.
+ *
+ * A minimal Node.js HTTP server built with the Express.js web framework.
+ * It exposes two GET endpoints on http://127.0.0.1:3000 :
+ *   GET /             -> "Hello world"
+ *   GET /good-evening -> "Good evening"
+ *
+ * This file is the single source of truth for the README endpoint table,
+ * the curl examples, and the Mermaid routing diagram; those docs MUST match
+ * the route paths, HTTP method, and response bodies defined here.
+ *
+ * Any request path that does not match a defined route falls through to
+ * Express's built-in 404 handler.
+ */
+const express = require('express');
 
+// Instantiate the Express application that provides path-based routing.
+const app = express();
+
+// Network configuration (preserved from the original tutorial server).
 const hostname = '127.0.0.1';
 const port = 3000;
 
-const server = http.createServer((req, res) => {
-  res.statusCode = 200;
-  res.setHeader('Content-Type', 'text/plain');
-  res.end('Hello, World!\n');
+/**
+ * GET / route handler.
+ *
+ * Responds with the plain-text body "Hello world" and HTTP status 200.
+ *
+ * @param {express.Request} req - Incoming HTTP request.
+ * @param {express.Response} res - HTTP response; sends the body "Hello world".
+ * @returns {void}
+ */
+app.get('/', (req, res) => {
+  res.type('text/plain').send('Hello world');
 });
 
-server.listen(port, hostname, () => {
+/**
+ * GET /good-evening route handler.
+ *
+ * Responds with the plain-text body "Good evening" and HTTP status 200.
+ *
+ * @param {express.Request} req - Incoming HTTP request.
+ * @param {express.Response} res - HTTP response; sends the body "Good evening".
+ * @returns {void}
+ */
+app.get('/good-evening', (req, res) => {
+  res.type('text/plain').send('Good evening');
+});
+
+// Start listening for connections and log the server URL on startup.
+app.listen(port, hostname, () => {
   console.log(`Server running at http://${hostname}:${port}/`);
 });
