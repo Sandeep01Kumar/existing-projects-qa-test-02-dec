@@ -1,6 +1,6 @@
 # hao-backprop-test
 
-A minimal Node.js **"Hello, World!"** HTTP server used as a Backprop integration test fixture. It is built exclusively on the Node.js core `http` module with **zero third-party dependencies** and answers every request with an identical plain-text greeting. `Source: server.js:22, package-lock.json:6-12`
+A minimal Node.js **"Hello, World!"** HTTP server used as a Backprop integration test fixture. It is built exclusively on the Node.js core `http` module `Source: server.js:22` with **zero third-party dependencies** `Source: package-lock.json:6-12`, and answers every **ordinary** HTTP request with an identical plain-text greeting. `Source: server.js:42-46`
 
 > **Repository name vs. package name.** This repository/README is named **`hao-backprop-test`**, while the npm package declared in the manifest is named **`hello_world`**. Both names refer to the same project and are reconciled here to prevent confusion. `Source: README.md:1, package.json:2`
 >
@@ -23,19 +23,24 @@ A minimal Node.js **"Hello, World!"** HTTP server used as a Backprop integration
 
 `hao-backprop-test` is a deliberately minimal, single-file **"Hello, World!"** HTTP responder that serves as a Backprop integration test fixture. Its entire implementation lives in [`server.js`](server.js) and relies solely on the Node.js built-in `http` module. `Source: server.js:22`
 
-The server provides a single **catch-all response**: **every** HTTP method (`GET`, `POST`, `PUT`, `DELETE`, …) sent to **any** URL path receives the exact same reply — HTTP status `200`, header `Content-Type: text/plain`, and the body `Hello, World!\n`. The request handler inspects neither the HTTP method nor the URL path, so there is **no routing, no query/body parsing, no authentication, no HTTPS, and no persistence**. `Source: server.js:42-46`
+The server provides a single **catch-all response**: for every **ordinary** HTTP request (`GET`, `POST`, `PUT`, `DELETE`, … sent to any URL path) the request handler ignores both the method and the path and returns the exact same reply — HTTP status `200`, header `Content-Type: text/plain`, and the body `Hello, World!\n` (14 bytes). Because the handler inspects neither the method nor the path, there is **no routing, no query/body parsing, no authentication, no HTTPS, and no persistence**. `Source: server.js:42-46`
+
+Two protocol-level behaviors are governed by Node.js itself and are **not** overridden by this handler:
+
+- **`HEAD` requests** receive the same `200` status and `Content-Type: text/plain` header but an **empty body** — Node.js automatically suppresses the response body (and omits `Content-Length`) for `HEAD`. `Source: server.js:28-35` `Verified: HEAD / → 200, text/plain, empty body, no Content-Length`
+- **`CONNECT` requests** never reach this handler: Node.js emits them on the server's `connect` event, which this server does not handle, so a raw `CONNECT` receives **no HTTP response** and the connection is closed. `Source: server.js:28-35` `Verified: raw CONNECT → 0 response bytes, connection closed`
 
 The project has **zero third-party dependencies**; it requires nothing beyond a Node.js runtime. `Source: package-lock.json:6-12`
 
 ## Prerequisites
 
-| Requirement | Recommended minimum | Verified on | Notes |
-|-------------|---------------------|-------------|-------|
-| Node.js | 14.x or newer | 22.23.1 | Executes `server.js` via the core `http` module. No `engines` field is pinned, so any modern release works. `Source: server.js:22` |
-| npm | 7.x or newer | 11.18.0 | Package manager. `lockfileVersion: 3` is produced by npm 7 and later. `Source: package-lock.json:4` |
+| Requirement | Recommended | Verified on | Notes |
+|-------------|-------------|-------------|-------|
+| Node.js | Any actively maintained release | v22.23.1 | Runs `server.js`, which uses only the core `http` module. The manifest declares no `engines` field, so the project enforces no version floor. `Source: server.js:22, package.json:1-11` `Verified: node --version → v22.23.1` |
+| npm | Any npm bundled with a supported Node.js | 10.9.8 | Package manager for the setup commands. The lockfile is `lockfileVersion: 3`. `Source: package-lock.json:4` `Verified: npm --version → 10.9.8` |
 
-- **Node.js 14.x or newer** is required to run `server.js` (which uses the core `http` module). The environment was verified on **Node.js 22.23.1**. `Source: server.js:22`
-- **npm 7.x or newer** is the package manager. The lockfile uses `lockfileVersion: 3`, which implies npm 7+; verified on **npm 11.18.0**. `Source: package-lock.json:4`
+- **Node.js** — the server uses only the built-in `http` module, and `package.json` declares no `engines` field, so no minimum version is enforced by the project. Any actively maintained Node.js release is suitable; this environment was verified on **Node.js v22.23.1**. `Source: server.js:22, package.json:1-11` `Verified: node --version → v22.23.1`
+- **npm** — npm is the package manager used for the setup commands below. The lockfile uses `lockfileVersion: 3`, which is the format **generated by npm 9 and later** and is **read-compatible with npm 7+** (per npm's `package-lock.json` documentation); this environment was verified on **npm 10.9.8**. `Source: package-lock.json:4` `Verified: npm --version → 10.9.8`
 - **No other prerequisites** — there are no databases, environment variables, or external services to configure. `Source: package-lock.json:6-12`
 
 ## Installation
@@ -43,9 +48,9 @@ The project has **zero third-party dependencies**; it requires nothing beyond a 
 Obtain the repository, then run `npm install`:
 
 ```bash
-# 1. Clone (or otherwise obtain) the repository
-git clone <repository-url>
-cd hao-backprop-test
+# 1. Clone the repository (or otherwise obtain the project files)
+git clone https://github.com/Sandeep01Kumar/existing-projects-qa-test-02-dec.git
+cd existing-projects-qa-test-02-dec
 
 # 2. Install dependencies
 npm install
@@ -77,17 +82,19 @@ curl http://127.0.0.1:3000/
 Hello, World!
 ```
 
-> **Do not use `npm start`.** No `start` script is defined, and the manifest's `main` field points to a non-existent `index.js`, so `npm start` fails. Always run `node server.js` instead — see [Troubleshooting](#troubleshooting). `Source: package.json:5`
+> **`npm start` also works.** No explicit `start` script is defined, so npm falls back to its built-in default and runs `node server.js` — printing the same startup line and serving the same response. What does **not** work is running the declared entry point directly: the manifest's `main` field points to `index.js`, which is **absent** from the repository, so `node index.js` (or any consumer that resolves the package's `main`) fails with `MODULE_NOT_FOUND`. See [Troubleshooting](#troubleshooting). `Source: package.json:5` `Verified: npm start → runs "node server.js"; node index.js → MODULE_NOT_FOUND`
 
 ## API Documentation
 
-The server exposes a single, implicit **catch-all endpoint**. It does not examine the request method or URL path — every request receives an identical reply (the **catch-all response**). `Source: server.js:42-46`
+The server exposes a single, implicit **catch-all endpoint**. For every **ordinary** request it does not examine the HTTP method or URL path — the request handler returns an identical reply (the **catch-all response**). Two lower-level protocols (`HEAD` and `CONNECT`) are handled specially by Node.js itself, as noted below the table. `Source: server.js:42-46`
 
 ### Endpoint contract
 
+The following contract applies to **ordinary requests** — `GET`, `POST`, `PUT`, `DELETE`, and any other method that carries a normal request/response body:
+
 | Aspect | Value |
 |--------|-------|
-| Method | **ANY** (`GET`, `POST`, `PUT`, `DELETE`, …) — not inspected |
+| Method | Any ordinary method (`GET`, `POST`, `PUT`, `DELETE`, …) — not inspected |
 | Path | **ANY** (`/`, `/anything`, …) — not inspected |
 | Request body | Ignored |
 | Response status | `200 OK` |
@@ -95,6 +102,17 @@ The server exposes a single, implicit **catch-all endpoint**. It does not examin
 | Response body | `Hello, World!\n` (14 bytes, trailing newline) |
 
 `Source: server.js:42-46`
+
+#### Protocol-level exceptions
+
+Two behaviors are governed by Node.js core and are **not** produced by the request handler:
+
+| Request type | Behavior |
+|--------------|----------|
+| `HEAD` | Same `200` status and `Content-Type: text/plain` header, but an **empty body** and **no `Content-Length`** — Node.js suppresses the body for `HEAD`. `Verified: HEAD / → 200, text/plain, empty body` |
+| `CONNECT` | Emitted on the server's `connect` event, which is not handled, so the request **never reaches the handler** and receives **no HTTP response** (the connection is closed). `Verified: raw CONNECT → 0 response bytes` |
+
+`Source: server.js:28-35`
 
 ### Examples
 
@@ -117,7 +135,7 @@ Content-Length: 14
 Hello, World!
 ```
 
-**Request — a different method and path (`POST /anything`)** returns the **identical** response, demonstrating the catch-all behavior: `Source: server.js:42-46`
+**Request — a different ordinary method and path (`POST /anything`)** returns the **identical** response, demonstrating the catch-all behavior for ordinary requests: `Source: server.js:42-46`
 
 ```bash
 curl -i -X POST http://127.0.0.1:3000/anything
@@ -141,11 +159,19 @@ sequenceDiagram
     participant C as HTTP Client
     participant S as server.js (http)
     participant H as Request Handler
-    C->>S: HTTP request (ANY method, ANY path)
+    Note over C,H: Ordinary request (GET, POST, PUT, DELETE, ...)
+    C->>S: Ordinary request (any ordinary method, any path)
     S->>H: invoke callback(req, res)
     H->>H: res.statusCode = 200
     H->>H: setHeader Content-Type text/plain
-    H-->>C: 200 OK — "Hello, World!\n"
+    H-->>C: 200 OK, body "Hello, World!\n" (14 bytes)
+    Note over C,H: HEAD request
+    C->>S: HEAD request
+    S->>H: invoke callback(req, res)
+    H-->>C: 200 OK, headers only, empty body (Node suppresses HEAD body)
+    Note over C,H: CONNECT request
+    C->>S: CONNECT request
+    S-->>C: No HTTP response (connect event, handler not invoked)
 ```
 
 ## Configuration
@@ -172,17 +198,20 @@ node server.js
 **Process lifecycle:**
 
 - **Start:** `node server.js`. `Source: server.js:56-58`
-- **Stop:** send a terminal signal — press `Ctrl+C` (SIGINT) when running in the foreground, or send `SIGTERM` to the process.
-- **Optional:** for long-running operation you may supervise the process with an external process manager (for example, `systemd` or `pm2`). This is purely operational and adds **no dependency** to the project itself. `Source: package-lock.json:6-12`
+- **Stop:** the process runs in the foreground and installs no custom signal handlers, so it is stopped with standard operating-system process control — press `Ctrl+C` (which delivers `SIGINT`) in the foreground terminal, or send `SIGTERM` to the process. `Source: server.js:1-58`
+- **Optional:** for long-running operation you may supervise the process with an external process manager (for example, `systemd` or `pm2`). Using such a tool is a purely operational, external choice; it adds **no dependency** to this project, which remains dependency-free. `Source: package-lock.json:6-12`
 
 ```mermaid
 flowchart TD
     A["Run: node server.js"] --> B["http.createServer registers catch-all handler"]
     B --> C["server.listen(3000, 127.0.0.1)"]
     C --> D{"Bound successfully?"}
-    D -- Yes --> E["Log: Server running at http://127.0.0.1:3000/"]
-    E --> F["Accept requests → 200 text/plain 'Hello, World!'"]
-    D -- No --> G["Error (e.g. EADDRINUSE) → process exits"]
+    D -->|Yes| E["Log: Server running at http://127.0.0.1:3000/"]
+    E --> F{"Incoming request type"}
+    F -->|"Ordinary (GET, POST, ...)"| G["Handler runs: 200 text/plain 'Hello, World!' (14 bytes)"]
+    F -->|HEAD| H["Handler runs; Node suppresses body: 200 headers, empty body"]
+    F -->|CONNECT| I["connect event (unhandled): no HTTP response"]
+    D -->|No| J["Error (e.g. EADDRINUSE): process exits"]
 ```
 
 ## Project Structure
@@ -197,19 +226,19 @@ The indexed project consists of the following files. `Source: server.js:1-58, pa
 | `README.md` | This documentation. |
 | `BaseTest.java` | **Secondary** — an independent Java/TestNG/Appium base class (Appium `AndroidDriver` targeting `http://127.0.0.1:4723/wd/hub`); **unrelated** to the Node HTTP server and listed here for acknowledgment only. `Source: BaseTest.java:1-32` |
 
-> **Note:** the manifest declares `main: index.js`, but `index.js` does **not** exist on disk — the real entry point is `server.js`. `Source: package.json:5`
+> **Note:** the manifest declares `main: index.js` `Source: package.json:5`, but `index.js` does **not** exist on disk — the real entry point is `server.js`. `Verified: filesystem — no index.js present; node index.js → MODULE_NOT_FOUND`
 
 ## Troubleshooting
 
 | Symptom | Cause | Resolution |
 |---------|-------|------------|
-| `npm start` fails | There is no `start` script, and `main` points to a non-existent `index.js`. `Source: package.json:5` | Run the server directly with `node server.js`. |
+| `node index.js` fails with `MODULE_NOT_FOUND` | The manifest's `main` is `index.js`, but that file is absent; the real entry point is `server.js`. `Source: package.json:5` `Verified: filesystem — no index.js; node index.js → MODULE_NOT_FOUND` | Run the server with `node server.js` — or `npm start`, which (having no explicit `start` script) falls back to `node server.js`. |
 | Port `3000` already in use (`EADDRINUSE`) | Another process is already bound to port 3000. `Source: server.js:25` | Stop the conflicting process, or change the `port` constant in `server.js` and restart. |
-| `npm test` fails | The `test` script is an intentional placeholder that echoes an error and exits with code `1`. `Source: package.json:6-8` | Expected behavior — there is no test suite to run. |
+| `npm test` fails | The `test` script is an intentional placeholder that echoes an error and exits with code `1`. `Source: package.json:6-8` `Verified: npm test → exit 1, "Error: no test specified"` | Expected behavior — there is no test suite to run. |
 | Not reachable from another host | The server uses loopback binding (`127.0.0.1`). `Source: server.js:24` | Edit the `hostname` constant in `server.js` (for example, to `0.0.0.0`) and restart — see [Deployment Guide](#deployment-guide). |
 
 ## License
 
 This project is licensed under the **MIT License**. `Source: package.json:10`
 
-There is no separate `LICENSE` file in the repository; the license is declared solely through the `license` field in `package.json`. `Source: package.json:10`
+There is no separate `LICENSE` file in the repository; the license is declared solely through the `license` field in `package.json`. `Source: package.json:10` `Verified: filesystem — no LICENSE file present`
