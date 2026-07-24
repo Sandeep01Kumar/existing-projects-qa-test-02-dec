@@ -18,12 +18,12 @@
  * @module server
  * @see README.md - setup, API reference, configuration, and deployment guide.
  */
-
+// Separator: divides the file-level documentation block above from the executable module body below.
 const http = require('http'); // Load the Node.js built-in `http` core module (no npm install required).
-
+// Separator: divides the `http` module import above from the network configuration constants below.
 const hostname = '127.0.0.1'; // Loopback host; 127.0.0.1 keeps the server reachable from the local machine only.
 const port = 3000;            // TCP port the HTTP server listens on for incoming connections.
-
+// Separator: divides the configuration constants above from the request-handler definition below.
 /**
  * Request handler registered for the server's `request` event. This is a catch-all:
  * for every ordinary request delivered to this callback the HTTP method and URL are
@@ -44,7 +44,7 @@ const server = http.createServer((req, res) => { // Create the HTTP server and r
   res.setHeader('Content-Type', 'text/plain');   // Declare the response body's MIME type as plain text.
   res.end('Hello, World!\n');                    // Write the response body ('Hello, World!' plus a trailing newline) and end the response.
 });                                              // Close the http.createServer() call.
-
+// Separator: divides the request-handler definition above from the server startup (listen) call below.
 /**
  * "listening" callback, invoked once the server has bound to the configured host
  * and port and is ready to accept connections. Side effect only: prints the
@@ -56,3 +56,4 @@ const server = http.createServer((req, res) => { // Create the HTTP server and r
 server.listen(port, hostname, () => {                           // Bind to the port and hostname, then start accepting connections.
   console.log(`Server running at http://${hostname}:${port}/`); // Log the reachable URL, confirming a successful start.
 });                                                             // Close the server.listen() call.
+// End of module: server.js defines and starts the HTTP server above and intentionally exports nothing.
