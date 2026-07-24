@@ -48,7 +48,18 @@ app.get('/good-evening', (req, res) => {
   res.type('text/plain').send('Good evening');
 });
 
-// Start listening for connections and log the server URL on startup.
-app.listen(port, hostname, () => {
+// Start listening for connections. In Express 5 the listen callback receives
+// any startup error (for example EADDRINUSE when the port is already in use) as
+// its first argument, because the callback is attached to the server's "error"
+// event as well as "listening". We therefore branch on that argument: the exact
+// success URL is logged only once the socket is actually bound, and any failure
+// is reported with a nonzero exit code so callers never observe a false success.
+app.listen(port, hostname, (error) => {
+  if (error) {
+    console.error(`Server failed to start: ${error.code || 'unknown error'}`);
+    process.exitCode = 1;
+    return;
+  }
+
   console.log(`Server running at http://${hostname}:${port}/`);
 });
