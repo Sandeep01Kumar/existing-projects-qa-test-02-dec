@@ -1,6 +1,6 @@
 # hello_world
 
-A minimal Node.js tutorial server built with the [Express](https://expressjs.com/) web framework. It exposes two plain-text `GET` endpoints — `GET /` returns `Hello world` and `GET /good-morning` returns `Good morning` — served from the base URL `http://127.0.0.1:3000`. This README is the single, end-to-end guide for the tutorial: install the dependencies, start the server, and call each endpoint. (`Source: server.js:L34-L36`, `Source: server.js:L47-L49`)
+A minimal Node.js tutorial server built with the [Express](https://expressjs.com/) web framework. It exposes two plain-text `GET` endpoints — `GET /` returns `Hello world` and `GET /good-morning` returns `Good morning` — served from the base URL `http://127.0.0.1:3000`. This README is the single, end-to-end guide for the tutorial: install the dependencies, start the server, and call each endpoint. (`Source: server.js:L47-L49`, `Source: server.js:L60-L62`)
 
 > **Project name:** this project is named **`hello_world`**, matching the `"name"` field in `package.json` (`Source: package.json:L2`). An earlier stub titled the repository `hao-backprop-test`; **`hello_world` is the canonical name** used consistently throughout this document.
 
@@ -41,7 +41,7 @@ node server.js
 npm start
 ```
 
-The server binds to host `127.0.0.1` (`Source: server.js:L22`) and listens on port `3000` (`Source: server.js:L23`), so its base URL is **`http://127.0.0.1:3000`**. Once it is listening, it logs the following line (`Source: server.js:L64`):
+The server binds to host `127.0.0.1` (`Source: server.js:L35`) and listens on port `3000` (`Source: server.js:L36`), so its base URL is **`http://127.0.0.1:3000`**. Once it is listening, it logs the following line (`Source: server.js:L77`):
 
 ```text
 Server running at http://127.0.0.1:3000/
@@ -49,24 +49,26 @@ Server running at http://127.0.0.1:3000/
 
 ## Endpoints
 
-The Express app registers two `GET` routes. Each handler sets the response content type to plain text via `res.type('text/plain')` (`Source: server.js:L35`, `Source: server.js:L48`). The endpoint table below lists this media type as `text/plain`; on the wire, Express appends a charset, so the actual HTTP `Content-Type` header is `text/plain; charset=utf-8`.
+The Express app registers two `GET` routes. Each handler sets the response content type to plain text via `res.type('text/plain')` (`Source: server.js:L48`, `Source: server.js:L61`). The endpoint table below lists this media type as `text/plain`; on the wire, Express appends a charset, so the actual HTTP `Content-Type` header is `text/plain; charset=utf-8`.
 
 | Method | Path | Status | Content-Type | Response body |
 | ------ | ------------- | ------ | ------------ | ------------- |
 | `GET` | `/` | `200` | `text/plain` | `Hello world` |
 | `GET` | `/good-morning` | `200` | `text/plain` | `Good morning` |
 
-Route definitions: `GET /` is handled at `Source: server.js:L34-L36` and `GET /good-morning` at `Source: server.js:L47-L49`.
+Route definitions: `GET /` is handled at `Source: server.js:L47-L49` and `GET /good-morning` at `Source: server.js:L60-L62`.
 
-> **Unmatched paths:** any request whose path does not match `/` or `/good-morning` returns `404 Not Found` from Express's built-in default handler (`Source: server.js:L13-L14`, `Source: server.js:L34-L49`).
+> **Exact paths only:** the two paths above are the *only* ones that serve a greeting. Route matching is case-sensitive and strict about a trailing slash, because the app enables both `case sensitive routing` and `strict routing` (`Source: server.js:L31-L32`). Requests to a differently-cased variant such as `/Good-Morning` or `/GOOD-MORNING`, or to the trailing-slash form `/good-morning/`, therefore return `404 Not Found` rather than the greeting.
 >
-> **Precision note:** the documented response body for `GET /` is `Hello world`, matching the wording used throughout this tutorial. For historical accuracy, the original, pre-Express implementation used Node's built-in `http` module and returned the literal `'Hello, World!\n'` — with a comma, an exclamation mark, and a trailing newline — for *every* request (`Source: commit 9328b9f, server.js:L9`, before the Express migration). The current Express version returns the exact body `Hello world` (`Source: server.js:L35`).
+> **Unmatched paths:** any request whose path does not match `/` or `/good-morning` returns `404 Not Found` from Express's built-in default handler (`Source: server.js:L13-L17`, `Source: server.js:L47-L62`).
+>
+> **Precision note:** the documented response body for `GET /` is `Hello world`, matching the wording used throughout this tutorial. For historical accuracy, the original, pre-Express implementation used Node's built-in `http` module and returned the literal `'Hello, World!\n'` — with a comma, an exclamation mark, and a trailing newline — for *every* request (`Source: commit 9328b9f, server.js:L9`, before the Express migration). The current Express version returns the exact body `Hello world` (`Source: server.js:L48`).
 
 ## Examples
 
-With the server running (via `node server.js` or `npm start`), call each endpoint at the base URL `http://127.0.0.1:3000` (`Source: server.js:L22-L23`) using `curl`.
+With the server running (via `node server.js` or `npm start`), call each endpoint at the base URL `http://127.0.0.1:3000` (`Source: server.js:L35-L36`) using `curl`.
 
-`GET /` returns `Hello world` (`Source: server.js:L34-L36`):
+`GET /` returns `Hello world` (`Source: server.js:L47-L49`):
 
 ```bash
 curl http://127.0.0.1:3000/
@@ -78,7 +80,7 @@ Expected output:
 Hello world
 ```
 
-`GET /good-morning` returns `Good morning` (`Source: server.js:L47-L49`):
+`GET /good-morning` returns `Good morning` (`Source: server.js:L60-L62`):
 
 ```bash
 curl http://127.0.0.1:3000/good-morning
@@ -92,7 +94,7 @@ Good morning
 
 ## Architecture
 
-Every request first reaches the Express application, which matches the request path against its registered routes and dispatches to the corresponding handler. Requests that match no route fall through to Express's built-in `404` handler (`Source: server.js:L34-L36`, `Source: server.js:L47-L49`, `Source: server.js:L13-L14`).
+Every request first reaches the Express application, which matches the request path against its registered routes and dispatches to the corresponding handler. Matching is exact — case-sensitive and strict about a trailing slash (`Source: server.js:L31-L32`) — so a differently-cased or trailing-slash variant of a documented path takes the *no match* branch below. Requests that match no route fall through to Express's built-in `404` handler (`Source: server.js:L47-L49`, `Source: server.js:L60-L62`, `Source: server.js:L13-L17`).
 
 ```mermaid
 flowchart TD

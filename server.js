@@ -10,13 +10,26 @@
  * the curl examples, and the Mermaid routing diagram; those docs MUST match
  * the route paths, HTTP method, and response bodies defined here.
  *
- * Any request path that does not match a defined route falls through to
- * Express's built-in 404 handler.
+ * Route matching is exact: it is case-sensitive and strict about a trailing
+ * slash, so only the two paths listed above serve a greeting. Every other
+ * request path - including different capitalisations such as `/GOOD-MORNING`
+ * and the trailing-slash form `/good-morning/` - falls through to Express's
+ * built-in 404 handler.
  */
 const express = require('express');
 
 // Instantiate the Express application that provides path-based routing.
 const app = express();
+
+// Pin route matching to the exact paths documented in the README endpoint
+// table. Express 5 leaves both of these settings disabled by default, which
+// makes `/GOOD-MORNING` and `/good-morning/` resolve to the `/good-morning`
+// handler; enabling them keeps a single canonical path per endpoint and sends
+// every other spelling to the built-in 404 handler. Both calls must run before
+// the first route is registered, because the application's router is created
+// lazily on first use and reads these settings at that moment.
+app.set('case sensitive routing', true);
+app.set('strict routing', true);
 
 // Network configuration (preserved from the original tutorial server).
 const hostname = '127.0.0.1';
