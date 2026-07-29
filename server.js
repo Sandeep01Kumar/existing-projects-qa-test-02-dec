@@ -4,7 +4,7 @@
  * A minimal Node.js HTTP server built with the Express.js web framework.
  * It exposes two GET endpoints on http://127.0.0.1:3000 :
  *   GET /             -> "Hello world"
- *   GET /good-evening -> "Good evening"
+ *   GET /good-morning -> "Good morning"
  *
  * This file is the single source of truth for the README endpoint table,
  * the curl examples, and the Mermaid routing diagram; those docs MUST match
@@ -36,16 +36,16 @@ app.get('/', (req, res) => {
 });
 
 /**
- * GET /good-evening route handler.
+ * GET /good-morning route handler.
  *
- * Responds with the plain-text body "Good evening" and HTTP status 200.
+ * Responds with the plain-text body "Good morning" and HTTP status 200.
  *
  * @param {express.Request} req - Incoming HTTP request.
- * @param {express.Response} res - HTTP response; sends the body "Good evening".
+ * @param {express.Response} res - HTTP response; sends the body "Good morning".
  * @returns {void}
  */
-app.get('/good-evening', (req, res) => {
-  res.type('text/plain').send('Good evening');
+app.get('/good-morning', (req, res) => {
+  res.type('text/plain').send('Good morning');
 });
 
 // Start listening for connections. In Express 5 the listen callback receives
