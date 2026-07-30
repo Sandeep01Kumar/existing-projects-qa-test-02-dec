@@ -1,5 +1,4 @@
 const express = require('express');
-
 const { sendText } = require('../lib/textResponse');
 
 const HELLO_BODY = 'Hello, World!\n';
