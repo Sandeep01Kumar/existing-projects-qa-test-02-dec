@@ -1,7 +1,3 @@
-// The good-evening feature flow and nothing else (F-007). The body is a module-scope
-// constant so no string is allocated per request, and the write is delegated to the
-// shared emitter - a framework reply helper would append an encoding parameter to
-// the media type and silently break the byte-exact contract.
 const express = require('express');
 
 const { sendText } = require('../lib/textResponse');

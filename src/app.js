@@ -10,6 +10,7 @@
 // ephemeral port rather than needing the project's default port to be free.
 const express = require('express');
 
+const optionsGuard = require('./middleware/optionsGuard');
 const helloRoutes = require('./routes/hello.routes');
 const goodEveningRoutes = require('./routes/goodEvening.routes');
 const notFound = require('./middleware/notFound');
@@ -23,16 +24,22 @@ const errorHandler = require('./middleware/errorHandler');
 // every reply, and etag would cost a hash over each body, making its removal a small
 // performance win as well as a parity one.
 //
-// The mount order below is load-bearing, and BOTH ways of getting it wrong are
+// The mount order below is load-bearing, and EVERY way of getting it wrong is
 // silent - the application still starts and still answers:
-//   1-2. the two feature routers, root path first, then the second endpoint.
-//   3.   the route-miss handler, mounted with no path argument so it runs only after
+//   1.   the OPTIONS guard, which must run BEFORE the routers. The routing engine
+//        answers an OPTIONS request itself as soon as the path matches a declared
+//        route, replying 200 from its own terminator with an Allow list and a nosniff
+//        header - two headers the baseline never sent, on a method this system does
+//        not serve, on a path that never reaches the emitter. The engine offers no
+//        switch to disable that, so getting in front of it is the only suppression.
+//   2-3. the two feature routers, root path first, then the second endpoint.
+//   4.   the route-miss handler, mounted with no path argument so it runs only after
 //        both routers decline. Mounted any earlier it swallows every request and both
 //        endpoints degrade to 404. It is deliberately not a wildcard route: this
 //        framework's major line demands that wildcards be named and throws at startup
 //        on a bare one, and a path-less handler is cheaper anyway because no pattern
 //        has to be compiled.
-//   4.   the error sink, which must stay last. The framework spots an error handler
+//   5.   the error sink, which must stay last. The framework spots an error handler
 //        by its four-parameter arity and only honours the final one as terminal;
 //        anywhere else a failure escapes to the built-in HTML error page this system
 //        has never emitted. It also absorbs promise rejections, which this major line
@@ -42,7 +49,7 @@ const errorHandler = require('./middleware/errorHandler');
 // request payload is never buffered or decoded; no payload-shrinking layer, no
 // request logger, no security-header bundle, no static asset handler, no proxy trust.
 // Each was weighed and declined, which holds the direct dependency count at exactly
-// one and per-request work at four handler frames.
+// one and per-request work at five handler frames.
 //
 // @returns {Function} the configured application, ready for a caller to bind
 const createApp = () => {
@@ -51,6 +58,7 @@ const createApp = () => {
   app.disable('x-powered-by');
   app.set('etag', false);
 
+  app.use(optionsGuard);
   app.use(helloRoutes);
   app.use(goodEveningRoutes);
   app.use(notFound);

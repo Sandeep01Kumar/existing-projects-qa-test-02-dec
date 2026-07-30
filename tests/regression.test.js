@@ -54,11 +54,25 @@ describe('header fingerprint parity (F-006-RQ-003)', () => {
 });
 
 describe('HEAD semantics (decision A3)', () => {
-  // Status only: Node strips the body for HEAD, so Content-Length is not on the
-  // wire and asserting it would fail.
-  test('HEAD / responds with status 200', async () => {
+  // A HEAD reply carries the representation metadata of the GET it derives from:
+  // no body, but the resource's Content-Length. Node cannot measure a body it
+  // never writes, so the emitter sets that header explicitly.
+  test('HEAD / responds with status 200, no body and Content-Length 14', async () => {
     const response = await fetch(`${baseUrl}/`, { method: 'HEAD' });
+    const body = await response.text();
     assert.equal(response.status, 200);
+    assert.equal(response.headers.get('content-type'), MEDIA_TYPE);
+    assert.equal(response.headers.get('content-length'), '14');
+    assert.equal(body, '');
+  });
+
+  test('HEAD /good-evening responds with status 200, no body and Content-Length 13', async () => {
+    const response = await fetch(`${baseUrl}/good-evening`, { method: 'HEAD' });
+    const body = await response.text();
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('content-type'), MEDIA_TYPE);
+    assert.equal(response.headers.get('content-length'), '13');
+    assert.equal(body, '');
   });
 });
 
@@ -78,4 +92,19 @@ describe('intentional behavioural deltas', () => {
     assert.equal(response.headers.get('content-type'), MEDIA_TYPE);
     assert.equal(body, NOT_FOUND_BODY);
   });
+
+  // The framework answers OPTIONS on a declared path itself unless it is intercepted,
+  // which would both succeed on an unserved method and add headers the pre-Express
+  // server never sent.
+  for (const path of ['/', '/good-evening']) {
+    test(`OPTIONS ${path} returns 404 and adds no framework headers`, async () => {
+      const response = await fetch(`${baseUrl}${path}`, { method: 'OPTIONS' });
+      const body = await response.text();
+      assert.equal(response.status, 404);
+      assert.equal(response.headers.get('content-type'), MEDIA_TYPE);
+      assert.equal(body, NOT_FOUND_BODY);
+      assert.equal(response.headers.get('allow'), null);
+      assert.equal(response.headers.get('x-content-type-options'), null);
+    });
+  }
 });
