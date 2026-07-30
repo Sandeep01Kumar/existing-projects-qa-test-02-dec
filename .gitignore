@@ -1,10 +1,4 @@
-# Installed dependency tree - 595 files in 66 directories, ~4.3 MB installed.
-# Never committed; `npm ci` restores it exactly. The lockfile stays tracked.
 node_modules/
 
-# npm diagnostic logs and local npm cache
 npm-debug.log*
 .npm/
-
-# Automation/validation artifacts (screenshots, screen recordings) - binary, never committed
-blitzy/
