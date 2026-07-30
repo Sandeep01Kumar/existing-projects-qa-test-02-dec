@@ -1,31 +1,3 @@
-// Regression flow: the backward-compatibility lock, and the only flow this file owns.
-//
-// The endpoint contract - each route's status, media type and exact body - belongs to
-// tests/endpoints.test.js. This file guards the properties that would drift SILENTLY
-// instead: a Content-Length that no longer matches the literal, a framework header the
-// pre-Express server never sent, and the two behavioural deltas that adding routing
-// deliberately introduced. Nothing here re-proves a response body of a served route;
-// keeping the two concerns in separate files is the separation this suite is built on,
-// which is also why neither file borrows the other's harness.
-//
-// Each suite below locks one drift-prone property:
-//   Content-Length parity   - the byte counts of both served routes, 14 and 13.
-//   header fingerprint      - the absence of ETag and X-Powered-By, i.e. proof that
-//                             the composition root still disables both. Forgetting
-//                             either is invisible in a browser and free to regress:
-//                             ETag returns as a weak validator hashed over every body,
-//                             X-Powered-By as a framework advertisement.
-//   HEAD semantics          - a bodiless request on the root route still succeeds.
-//   behavioural deltas      - an unserved method and an undeclared path both answer
-//                             404 in plain text. Before routing existed every request
-//                             received the Hello response, so these two are the only
-//                             intentional breaks in the observable contract; asserting
-//                             them keeps a future catch-all from quietly restoring the
-//                             old behaviour and making a typo'd path look successful.
-//
-// Only the runtime's own test runner, its assertion library, the global fetch client
-// and the application factory are used. The suite adds no dependency of any kind, so
-// it cannot contribute to the application's install size, startup time or memory.
 const { after, before, describe, test } = require('node:test');
 const assert = require('node:assert/strict');
 
@@ -34,19 +6,64 @@ const createApp = require('../src/app');
 const NOT_FOUND_BODY = 'Not Found\n';
 const MEDIA_TYPE = 'text/plain';
 
-// Assigned once in the hook below and only read afterwards, so no test can influence
-// another through them.
+// Records a server's live sockets for the fallback branch of closeServer below. Attached
+// before the bind is awaited so no connection can slip past it, and each socket removes
+// itself on close so the set only ever holds what is genuinely live.
+const trackConnections = (server) => {
+  const sockets = new Set();
+
+  server.on('connection', (socket) => {
+    sockets.add(socket);
+    socket.once('close', () => sockets.delete(socket));
+  });
+
+  return sockets;
+};
+
+// Releases the listener, so the run ends instead of hanging - and so a teardown that
+// FAILS is seen rather than passing silently.
+//
+// `close` goes first: it stops the listener accepting straight away and registers the
+// completion callback. Only then are the pooled sockets released. Successful replies
+// carry `Keep-Alive: timeout=5`, so fetch parks connections that would otherwise hold
+// `close` open for the whole idle timeout, and clearing them while `close` is already
+// pending removes that wait without leaving a window for a fresh connection to be
+// accepted behind the sweep. `closeAllConnections` clears them in one call but is not
+// present on every runtime, so it sits behind a capability check and the tracked sockets
+// are destroyed by hand otherwise. The sweep deliberately never touches keep-alive
+// itself: disabling it would be a shorter route to the same quiet teardown and would
+// also change the response headers, which is precisely the drift the header-fingerprint
+// group below exists to catch - the teardown must not be the thing that breaks the lock
+// it is here to protect.
+//
+// The close callback's first argument is an Error, so handing `resolve` straight to
+// `close` would resolve successfully WITH that error as its value and hide a listener
+// that never came free. It is rejected explicitly instead.
+const closeServer = (server, sockets) =>
+  new Promise((resolve, reject) => {
+    server.close((err) => (err ? reject(err) : resolve()));
+
+    if (typeof server.closeAllConnections === 'function') {
+      server.closeAllConnections();
+      return;
+    }
+
+    for (const socket of sockets) {
+      socket.destroy();
+    }
+
+    sockets.clear();
+  });
+
 let server;
+let sockets;
 let baseUrl;
 
-// One server for the whole file, bound on an EPHEMERAL port: passing 0 lets the kernel
-// choose a free one, so this suite passes whether or not the project's default port is
-// already serving. The loopback host is passed explicitly, matching the posture the
-// application's own entry point defends. The port is unknowable until the socket is
-// listening, hence awaiting that event instead of polling for it - the suite contains
-// no timer, no retry and no arbitrary delay.
+// Bind an independent loopback listener on port 0 and await 'listening' so requests
+// cannot race startup or collide with port 3000.
 before(async () => {
   server = createApp().listen(0, '127.0.0.1');
+  sockets = trackConnections(server);
   await new Promise((resolve, reject) => {
     server.once('listening', resolve);
     server.once('error', reject);
@@ -54,17 +71,11 @@ before(async () => {
   baseUrl = `http://127.0.0.1:${server.address().port}`;
 });
 
-// Tearing the socket down keeps the runner from hanging: 200 replies carry
-// Keep-Alive, so the fetch client parks pooled connections that would otherwise hold
-// the server open past the last assertion.
 after(async () => {
-  server.closeAllConnections();
-  await new Promise((resolve) => server.close(resolve));
+  await closeServer(server, sockets);
 });
 
 describe('Content-Length parity', () => {
-  // Header values arrive as strings, and these assertions are strict, so the
-  // comparands are quoted deliberately - the numbers 14 and 13 would not match.
   test('GET / reports Content-Length 14', async () => {
     const response = await fetch(`${baseUrl}/`);
     await response.text();
@@ -79,9 +90,6 @@ describe('Content-Length parity', () => {
 });
 
 describe('header fingerprint parity (F-006-RQ-003)', () => {
-  // A missing header reads back as null through this client, so absence is asserted as
-  // that exact value. A truthiness check would pass just as happily on an empty string
-  // and would therefore prove less.
   test('no ETag header is emitted', async () => {
     const response = await fetch(`${baseUrl}/`);
     await response.text();
@@ -110,11 +118,7 @@ describe('HEAD semantics (decision A3)', () => {
 });
 
 describe('intentional behavioural deltas', () => {
-  // Both routes serve read-only text and are declared for GET alone, so any other
-  // method is a route miss rather than a success. The media type is compared for exact
-  // equality on purpose: a substring test would still pass if a charset parameter crept
-  // back in, and it is the framework's own response helpers - unused here - that append
-  // one.
+  // POST is unsupported and must reach the plain-text route-miss handler.
   test('POST / returns 404 with a plain-text body', async () => {
     const response = await fetch(`${baseUrl}/`, { method: 'POST' });
     const body = await response.text();
