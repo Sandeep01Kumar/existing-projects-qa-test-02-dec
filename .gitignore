@@ -1,0 +1,9 @@
+# Installed dependency tree - restore with `npm ci`, never committed
+node_modules/
+
+# npm diagnostic logs
+npm-debug.log*
+.npm/
+
+# Automation/validation artifacts (screenshots, screen recordings) - binary, never committed
+blitzy/
