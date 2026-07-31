@@ -96,9 +96,17 @@ dependencies** — there are no `devDependencies` at all. It binds an **ephemera
 passes whether or not a server is already listening on port 3000.
 
 The script is `node --test "tests/**/*.test.js"`, and the **runner** expands that quoted glob
-itself — an ability the runner gained in Node 21. That is a second, independent reason to stay
-on the supported 22.12.0+ line: on an end-of-life Node 18 or 20 the pattern is taken literally,
-so no suite is discovered and `npm test` would report success without having run anything.
+itself — an ability the runner gained in Node 21. Measured on the supported runtime (Node
+v22.23.2, npm 10.9.8), run exactly as npm runs it: both suite files are discovered and the run
+reports **8 suites, 31 tests, 31 passing, 0 failing**, exit code `0` — 12 tests from
+`tests/endpoints.test.js` and 19 from `tests/regression.test.js`. Read those counts, not just
+the exit code: a glob that matched nothing would report `# tests 0` and still exit `0`.
+
+On an end-of-life Node 18 or 20 the runner has no glob expansion, so it takes the pattern
+literally and stops with `Could not find '…/tests/**/*.test.js'` and exit code `1` — measured on
+Node v18.20.8 and v20.20.2. `npm test` therefore fails loudly on those lines instead of
+reporting a success it never earned; the suite simply is not available there, which is a second,
+independent reason to stay on the supported 22.12.0+ line.
 
 ## Intentional behaviour changes
 
@@ -150,10 +158,17 @@ Every response — success, route miss and failure alike — leaves through the 
 - The application is decomposed into one module per flow: configuration, the shared response
   emitter, one router per feature, the route-miss handler, the error sink, and the
   composition root, leaving `server.js` as the bootstrap alone.
-- Measured performance profile, disclosed rather than glossed: request latency 3.700 ms →
-  3.716 ms mean (a 0.4% difference, against a budget of under 10 ms); startup 29 ms → 81 ms
-  (8% of the under-one-second budget); resident memory 53.8 MB → 71.0 MB, an increase of
-  about **17.6 MB — the one budget genuinely affected**, and the unavoidable cost of loading
-  the framework. The installed dependency tree is 595 files and is git-ignored; the
-  repository's own tracked source is about 108 KB across 16 tracked files excluding the three
-  binary assets, a third of which is the committed lockfile.
+- Measured performance profile, disclosed rather than glossed. Recorded during planning on the
+  reference toolchain, baseline server versus this one: request latency 3.700 ms → 3.716 ms mean
+  (a 0.4% difference, against a budget of under 10 ms); startup 29 ms → 81 ms (8% of the
+  under-one-second budget); resident memory 53.8 MB → 71.0 MB, an increase of about **17.6 MB —
+  the one budget genuinely affected**, and the unavoidable cost of loading the framework.
+  Re-measured on this Windows host (Node v22.23.2) the absolute numbers differ — 63 ms → 178 ms
+  startup, 13.149 ms → 14.054 ms mean latency, 39.6 MB → 52.6 MB working set — because they are
+  taken end to end on a slower virtualized machine and a working set is not a resident set. What
+  reproduces is the shape of the result: startup far inside its budget, a sub-millisecond
+  latency delta, and memory as the only line that moves materially. The feature document sets
+  out both differences in full.
+- The installed dependency tree is 595 files and is git-ignored; the repository's own tracked
+  source is about 113 KB across 16 tracked files excluding the three binary assets, a third of
+  which is the committed lockfile.

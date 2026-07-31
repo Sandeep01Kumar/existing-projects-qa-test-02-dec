@@ -423,10 +423,27 @@ unavoidable cost of loading the framework itself — no amount of code disciplin
 Note also that an earlier recorded *~30 MB baseline* figure is stale: the baseline server
 measured 53.8 MB on the current runtime before any change was made.
 
-Re-measured on the validation host used for this checkpoint, the absolute values differ — that
-host is slower and its numbers include client-side request cost — but the conclusions
-reproduce exactly: startup and latency both stay inside budget, and resident memory is the
-only line that moves materially.
+Re-measured on the Windows validation host used for this checkpoint (Node v22.23.2), running the
+same comparison — the 14-line pre-Express server restored verbatim from its original commit in
+this repository's history, against this implementation, each spawned as its own process and
+driven with 200 sequential requests:
+
+| Measurement | Baseline | After | Reading |
+|---|---|---|---|
+| Startup to the logged line | 63 ms | 178 ms | Inside the under-one-second budget, about 18% of it |
+| Mean request latency | 13.149 ms | 14.054 ms | +0.905 ms, +6.9% |
+| Working set, read from the process | 39.6 MB | 52.6 MB | +13.1 MB |
+
+The absolute values differ from the planning figures above, and two of those differences are
+worth naming rather than smoothing over. The latency numbers on this host sit *above* the 10 ms
+budget on **both** sides of the comparison, the baseline included: they are measured end to end
+from a client in another process on a slower virtualized host, so they carry client and loopback
+cost that the planning measurement did not. What reproduces here is therefore the *delta* —
+under a millisecond, single-digit percent — rather than the absolute budget, which only the
+planning host's figures can speak to. And a Windows working set is not the same quantity as a
+Unix resident set, so what reproduces on that line is the direction and the order of magnitude:
++13.1 MB here against the planning +17.6 MB. Startup stays comfortably inside its budget on both
+hosts, and memory remains the one line that moves materially.
 
 Safeguards applied:
 
@@ -468,7 +485,7 @@ Declining all of them is what holds the direct dependency count at exactly one.
 - `npm audit --omit=dev` reports **0 vulnerabilities** on this exact tree.
 - The installed tree is 595 files, excluded from version control by `.gitignore`. Its size
   depends on what is counted: 2.1 MB of file content measured here, 4.3 MB of disk usage
-  measured during planning. The repository's own tracked source is about 108 KB across 16
+  measured during planning. The repository's own tracked source is about 113 KB across 16
   tracked files excluding the three binary assets — a third of it the committed lockfile, and
   well under 1 MB however it is counted.
 - The test suite adds **zero** dependencies — there are no `devDependencies` at all.
@@ -492,9 +509,22 @@ The gap between them is deliberate and it is not a documentation gap:
   but it does not remove it. Nothing in this repository recommends those lines.
 - **The packaged test suite needs the newer runner.** `npm test` is
   `node --test "tests/**/*.test.js"`, and the *runner* expands that glob — an ability it gained
-  in Node 21. On Node 18 or 20 the pattern is taken literally, no suite is discovered, and the
-  command exits successfully having verified nothing. A false-green quality gate is worse than a
-  red one, which is the second, independent reason the supported floor sits where it does.
+  in Node 21. Measured on the four runtimes that matter here, with the command run exactly as
+  npm runs it:
+
+  ```text
+  v22.23.2   8 suites, 31 tests, 31 pass, 0 fail            exit 0
+  v21.7.3    8 suites, 31 tests, 31 pass, 0 fail            exit 0
+  v20.20.2   Could not find '.../tests/**/*.test.js'        exit 1
+  v18.20.8   Could not find '.../tests/**/*.test.js'        exit 1
+  ```
+
+  On Node 18 or 20 the pattern is taken literally and the run stops before a single test
+  executes. That is a loud failure with a non-zero exit, not a green gate that verified
+  nothing — but a quality gate that cannot run is still a quality gate you do not have, which is
+  the second, independent reason the supported floor sits where it does. Note precisely what the
+  two numbers each cover: the compatibility floor says the *server* loads on Node 18, and it
+  does; it does not say the *test suite* runs there.
 - **`engines` is left at the framework's `>=18` floor on purpose**, because that is the value
   the frozen plan of record specifies for this manifest field and it is factually correct as a
   compatibility statement. The support policy is expressed here and in the README rather than by
@@ -520,9 +550,15 @@ pattern itself — a capability it gained in Node 21, which is why the supported
 above governs `npm test` as much as it governs security — so a suite added later under `tests/`
 is discovered with no manifest edit; quoting keeps the shell out of the expansion, which matters
 because `cmd.exe` does not expand globs at all; and a bare directory argument such as
-`node --test tests` fails outright, because positional arguments are resolved as module paths.
-Both suites bind an **ephemeral** port by passing `0` to `listen`, so `npm test` passes whether
-or not a server already holds port 3000.
+`node --test tests` fails outright with a module-resolution error, measured at exit `1`, because
+positional arguments are resolved as module paths. Both suites bind an **ephemeral** port by
+passing `0` to `listen`, so `npm test` passes whether or not a server already holds port 3000.
+
+One property of glob discovery is worth knowing in advance rather than discovering later: a
+pattern that matches **nothing** is not an error, so the runner reports `# tests 0` and exits
+`0`. The counts are therefore the thing to read, not the exit code alone. A healthy run on this
+tree reports **8 suites and 31 tests, all passing** — 12 from `tests/endpoints.test.js` and 19
+from `tests/regression.test.js`.
 
 ## Rules
 
