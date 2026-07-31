@@ -170,5 +170,5 @@ Every response — success, route miss and failure alike — leaves through the 
   latency delta, and memory as the only line that moves materially. The feature document sets
   out both differences in full.
 - The installed dependency tree is 595 files and is git-ignored; the repository's own tracked
-  source is about 113 KB across 16 tracked files excluding the three binary assets, a third of
+  source is about 101 KB across 16 tracked files excluding the three binary assets, a third of
   which is the committed lockfile.

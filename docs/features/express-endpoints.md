@@ -485,7 +485,7 @@ Declining all of them is what holds the direct dependency count at exactly one.
 - `npm audit --omit=dev` reports **0 vulnerabilities** on this exact tree.
 - The installed tree is 595 files, excluded from version control by `.gitignore`. Its size
   depends on what is counted: 2.1 MB of file content measured here, 4.3 MB of disk usage
-  measured during planning. The repository's own tracked source is about 113 KB across 16
+  measured during planning. The repository's own tracked source is about 101 KB across 16
   tracked files excluding the three binary assets — a third of it the committed lockfile, and
   well under 1 MB however it is counted.
 - The test suite adds **zero** dependencies — there are no `devDependencies` at all.
