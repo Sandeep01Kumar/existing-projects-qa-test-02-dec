@@ -3,7 +3,13 @@ const { sendText } = require('../lib/textResponse');
 
 const HELLO_BODY = 'Hello, World!\n';
 
-const router = express.Router();
+// Exact-path matching, both options load-bearing. Left at their defaults the router treats
+// case as insignificant and a trailing slash as optional, so `//` would ALSO serve this
+// resource - an alias the contract never declared and no test covered. The declared surface is
+// exactly two paths and everything else is the plain-text 404, so the matcher is told to agree:
+// `strict` makes a trailing slash significant and `caseSensitive` makes case significant. Both
+// are settings on the compiled matcher, so they cost nothing per request.
+const router = express.Router({ caseSensitive: true, strict: true });
 
 // Declining OPTIONS is load-bearing, not dead code. router@2.2.0 answers OPTIONS
 // itself whenever a matched route has no OPTIONS handler: it collects the route's

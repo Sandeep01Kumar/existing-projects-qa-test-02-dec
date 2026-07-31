@@ -155,6 +155,29 @@ describe('intentional behavioural deltas', () => {
     assert.equal(body, NOT_FOUND_BODY);
   });
 
+  // The declared surface is exactly two paths, so every near-miss spelling of them has to fail
+  // like any other unknown path. Left at its defaults the router would treat case as
+  // insignificant and a trailing slash as optional, quietly serving `/GOOD-EVENING`,
+  // `/Good-Evening`, `/good-evening/` and `//` as though they were declared resources - aliases
+  // no documentation lists and nothing else would have caught, because each one still returns a
+  // valid-looking 200. Both routers therefore run with `caseSensitive` and `strict` matching,
+  // and these locks are what stop a future edit from dropping either option: HEAD is checked
+  // alongside GET because HEAD is derived from the same route, so an alias would resurface on
+  // both methods at once.
+  for (const path of ['//', '/good-evening/', '/GOOD-EVENING', '/Good-Evening']) {
+    for (const method of ['GET', 'HEAD']) {
+      test(`${method} ${path} is not an alias and returns the plain-text 404`, async () => {
+        const response = await fetch(`${baseUrl}${path}`, { method });
+        const body = await response.text();
+        assert.equal(response.status, 404);
+        assert.equal(response.headers.get('content-type'), MEDIA_TYPE);
+        if (method === 'GET') {
+          assert.equal(body, NOT_FOUND_BODY);
+        }
+      });
+    }
+  }
+
   // OPTIONS is the one unsupported method the routing engine will answer BY ITSELF if
   // left alone: on a path it can match, it replies 200 with an Allow list and a nosniff
   // header - a status this system does not serve on a method it does not serve, carrying

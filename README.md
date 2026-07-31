@@ -10,9 +10,17 @@ quick start.
 
 ## Prerequisites
 
-- **Node.js 18 or newer.** This is the engine floor declared by `express@5.2.1` itself and it
-  is now recorded in `package.json` under `engines`. It supersedes the project's previous
-  14.x minimum. Validated on Node v22.
+- **Run it on Node.js 22.12.0 or newer** — a currently supported LTS line. This is the
+  project's supported runtime, and it is the floor to use for anything beyond a throwaway
+  local read of the code.
+- **Do not run it on Node 18 or Node 20.** Both lines have reached end-of-life and no longer
+  receive security patches, so an unpatched runtime or HTTP-parser defect there is never fixed.
+  The server would load on them; that is a compatibility fact, not a recommendation.
+- **`engines` in `package.json` is a compatibility floor, not a support policy.** It declares
+  `"node": ">=18"` because that is the floor `express@5.2.1` itself declares, and the project's
+  plan of record fixes that exact value. It records what the code *runs on* and supersedes the
+  project's previous 14.x minimum; it does not say what an operator should *deploy on* — the
+  two bullets above do. Validated on Node v22.23.2 with npm 10.9.8.
 - **npm 7 or newer**, required by `lockfileVersion 3` in the committed lockfile.
 - **TCP port 3000 must be free.**
 
@@ -56,6 +64,12 @@ Server running at http://127.0.0.1:3000/
 `Content-Type` is exactly `text/plain` — no charset parameter is ever appended. No
 `X-Powered-By` header and no `ETag` header is emitted on any of these responses.
 
+The two paths are matched **exactly as written**: matching is case-sensitive and a trailing
+slash is significant, so `/GOOD-EVENING`, `/Good-Evening`, `/good-evening/` and `//` are **not**
+aliases — each one is "any other path" and returns the same `404`. The table above is therefore
+the complete list of requests that succeed, and it is not a subset of what the server actually
+serves.
+
 The dash in the HEAD row is deliberate and measured: a HEAD reply carries no body, so Node
 sends no `Content-Length` at all. The header is genuinely absent rather than merely
 undocumented, and the pre-Express server behaved identically.
@@ -77,6 +91,11 @@ The suite runs on Node's **built-in test runner** (`node --test`) and adds **zer
 dependencies** — there are no `devDependencies` at all. It binds an **ephemeral port**, so it
 passes whether or not a server is already listening on port 3000.
 
+The script is `node --test "tests/**/*.test.js"`, and the **runner** expands that quoted glob
+itself — an ability the runner gained in Node 21. That is a second, independent reason to stay
+on the supported 22.12.0+ line: on an end-of-life Node 18 or 20 the pattern is taken literally,
+so no suite is discovered and `npm test` would report success without having run anything.
+
 ## Intentional behaviour changes
 
 The previous server had a single catch-all handler that answered every path and every method
@@ -87,7 +106,11 @@ three behaviours changed on purpose:
   bind, same startup line.
 - Requests to **any other path** now return `404` with a `text/plain` body. A catch-all that
   kept returning the Hello response would make a typo such as `/good-evenin` silently
-  succeed, leaving the two endpoints indistinguishable from a client error.
+  succeed, leaving the two endpoints indistinguishable from a client error. "Any other path"
+  is meant literally: both routers match **case-sensitively** and treat a **trailing slash as
+  significant** (`express.Router({ caseSensitive: true, strict: true })`), so a near miss such
+  as `/GOOD-EVENING`, `/Good-Evening`, `/good-evening/` or `//` fails exactly like `/nope`
+  rather than quietly succeeding through the framework's default, laxer matching.
 - **Methods other than GET and HEAD** now return `404`. Only these two read-only methods are
   served; HEAD is derived automatically from GET. `OPTIONS` is included in that rule, on the
   declared paths as well as on every other one: each feature router registers an `OPTIONS`
@@ -128,4 +151,5 @@ Every response — success, route miss and failure alike — leaves through the 
   (8% of the under-one-second budget); resident memory 53.8 MB → 71.0 MB, an increase of
   about **17.6 MB — the one budget genuinely affected**, and the unavoidable cost of loading
   the framework. The installed dependency tree is 595 files and is git-ignored; the
-  repository's own tracked source is about 63 KB excluding the three binary assets.
+  repository's own tracked source is about 108 KB across 16 tracked files excluding the three
+  binary assets, a third of which is the committed lockfile.

@@ -37,6 +37,33 @@ error path         -> 22 bytes  'Internal Server Error\n'
 The trailing `0a` on each body is part of the contract, and it is invisible to a naive string
 comparison — which is why it is verified as bytes.
 
+### Path matching is exact, so the table above is the whole successful surface
+
+`any other path` in that table is meant literally. Both feature routers are constructed as
+`express.Router({ caseSensitive: true, strict: true })`, which makes **case significant** and a
+**trailing slash significant**. Without those two options the framework's default matching is
+laxer than the contract: case is folded and a trailing slash is optional, so a set of aliases
+nobody declared would answer `200` and look indistinguishable from the documented paths.
+Measured on the running pipeline:
+
+```text
+GET/HEAD /                 -> 200   (declared)
+GET/HEAD /good-evening     -> 200   (declared)
+GET/HEAD //                -> 404, text/plain, 'Not Found\n'
+GET/HEAD /good-evening/    -> 404, text/plain, 'Not Found\n'
+GET/HEAD /GOOD-EVENING     -> 404, text/plain, 'Not Found\n'
+GET/HEAD /Good-Evening     -> 404, text/plain, 'Not Found\n'
+GET/HEAD /good-evenin      -> 404, text/plain, 'Not Found\n'
+```
+
+The effect is that the documented surface and the effective surface are the same set rather than
+the documentation describing a subset of what is really served — which matters more than the
+current bodies do. Both responses here are constant public text, so nothing is disclosed by an
+alias today; but an undeclared way in is a path that any later route-specific rule would simply
+not be written for. `tests/regression.test.js` locks all four aliases for **both** GET and HEAD,
+because HEAD is derived from the same route and an alias would otherwise resurface on both
+methods at once.
+
 ### Why the HEAD rows carry no Content-Length
 
 The dash is deliberate and measured, not an omission. A HEAD reply sends no body, so the
@@ -134,7 +161,7 @@ addressable endpoints — not a defect, and not something to be shimmed back.
 | `POST /`, `DELETE /`, other methods | 200, `Hello, World!\n` | 404, `Not Found\n` | **Intentional change** |
 | Dependency count | 0 | 1 direct, 67 in the resolved tree | **Intentional change** |
 | Install step before running | none | `npm ci` required | **Intentional change** |
-| Runtime floor | Node 14.x | Node 18 | **Intentional change** |
+| Runtime floor | Node 14.x | `engines` declares `>=18` (compatibility); Node **22.12.0+** is the supported runtime | **Intentional change** |
 | Process-level error posture | unhandled, crash on bind failure | Unchanged | **Preserved** |
 
 ### The adjudicated decisions behind them
@@ -142,7 +169,10 @@ addressable endpoints — not a defect, and not something to be shimmed back.
 **Path naming.** `GET /good-evening` is lowercase kebab-case derived directly from the
 response phrase. It cannot collide with `/`, and it is self-documenting, so the contract needs
 no lookup table. Note the URL is kebab-case while the module that owns it is camelCase
-(`src/routes/goodEvening.routes.js`); the two are not the same string.
+(`src/routes/goodEvening.routes.js`); the two are not the same string. The spelling is also the
+*only* accepted spelling: matching is case-sensitive and trailing-slash-strict, so
+`/GOOD-EVENING` and `/good-evening/` are route misses rather than aliases — see "Path matching is
+exact" above.
 
 **Unmatched paths return 404, not the Hello response.** A catch-all that kept answering with
 Hello would make a typo such as `/good-evenin` silently succeed, rendering the two endpoints
@@ -168,8 +198,10 @@ header, written from the router's own terminator before this project's handlers 
 headers the pre-Express server never sent, on a method this system does not serve.
 
 The engine exposes no setting to switch that off; its router accepts only case-sensitivity,
-parameter-merging and strict-routing options. Suppression therefore happens where the method
-contract belongs: **each feature router registers an `OPTIONS` handler on its own route that
+parameter-merging and strict-routing options — two of which this project does set, for the
+exact-path matching described above, and neither of which touches `OPTIONS`. Suppression
+therefore happens where the method contract belongs: **each feature router registers an
+`OPTIONS` handler on its own route that
 simply declines**, calling `next()` without writing anything. With an `OPTIONS` handler present
 the router has nothing to advertise, so it generates no automatic reply, and the request falls
 through to the single route-miss flow like every other unsupported method.
@@ -409,7 +441,10 @@ Declining all of them is what holds the direct dependency count at exactly one.
 ## Reproducibility and dependency integrity
 
 - `express@5.2.1`, MIT licensed, declaring an engine floor of `node >= 18` and 28 direct
-  dependencies of its own.
+  dependencies of its own. That figure is the framework's own **compatibility** floor, and
+  `package.json` propagates it verbatim under `engines`; it is not this project's support
+  policy. See the runtime-support subsection below for the distinction, which matters because a
+  clean package tree does nothing for an unpatched runtime.
 - 67 installed packages in the resolved tree, pinned by a committed `package-lock.json` at
   `lockfileVersion 3`, whose `packages` object holds 68 entries — the repository root plus the
   67 installed packages.
@@ -417,13 +452,46 @@ Declining all of them is what holds the direct dependency count at exactly one.
 - `npm audit --omit=dev` reports **0 vulnerabilities** on this exact tree.
 - The installed tree is 595 files, excluded from version control by `.gitignore`. Its size
   depends on what is counted: 2.1 MB of file content measured here, 4.3 MB of disk usage
-  measured during planning. The repository's own tracked source is about 63 KB excluding the
-  three binary assets — well under 1 MB either way.
+  measured during planning. The repository's own tracked source is about 108 KB across 16
+  tracked files excluding the three binary assets — a third of it the committed lockfile, and
+  well under 1 MB however it is counted.
 - The test suite adds **zero** dependencies — there are no `devDependencies` at all.
+
+### Runtime support policy
+
+Two different numbers govern the runtime, and conflating them is the mistake this subsection
+exists to prevent:
+
+| | Value | What it means |
+|---|---|---|
+| **Compatibility floor** | `engines.node` = `>=18` in `package.json`, mirrored in the lockfile root | The oldest runtime the code *loads and runs* on. It is `express@5.2.1`'s own declared floor, propagated verbatim, and it is the exact value the project's plan of record fixes. |
+| **Supported runtime** | **Node 22.12.0 or newer** — a currently supported LTS line | What the project is *supported on*, and what an operator should deploy. |
+
+The gap between them is deliberate and it is not a documentation gap:
+
+- **Node 18 and Node 20 are past end-of-life and receive no security patches.** A runtime or
+  HTTP-parser defect on those lines is never fixed, so running there exposes the process to
+  defects that no application-level control in this project can mitigate. Loopback-only binding
+  narrows the reach of such a defect to local clients — including a browser on the same host —
+  but it does not remove it. Nothing in this repository recommends those lines.
+- **The packaged test suite needs the newer runner.** `npm test` is
+  `node --test "tests/**/*.test.js"`, and the *runner* expands that glob — an ability it gained
+  in Node 21. On Node 18 or 20 the pattern is taken literally, no suite is discovered, and the
+  command exits successfully having verified nothing. A false-green quality gate is worse than a
+  red one, which is the second, independent reason the supported floor sits where it does.
+- **`engines` is left at the framework's `>=18` floor on purpose**, because that is the value
+  the frozen plan of record specifies for this manifest field and it is factually correct as a
+  compatibility statement. The support policy is expressed here and in the README rather than by
+  narrowing that field, so the two facts stay distinguishable instead of one silently
+  overwriting the other.
+
+Verified on the host used for this work: Node **v22.23.2**, npm **10.9.8** — inside the
+supported range, and comfortably above the compatibility floor.
 
 ### Prerequisites and commands
 
-Node 18 or newer, and a free TCP port 3000 to run the server (the test suite does not need it).
+Node 22.12.0 or newer (see the support policy immediately above), and a free TCP port 3000 to
+run the server (the test suite does not need it).
 
 ```bash
 npm ci        # restores the exact 67-package tree from the committed lockfile
@@ -432,11 +500,13 @@ npm test      # node --test "tests/**/*.test.js"
 ```
 
 The test command is a **quoted glob**, and each part of that matters. The runner expands the
-pattern itself, so a suite added later under `tests/` is discovered with no manifest edit;
-quoting keeps the shell out of the expansion, which matters because `cmd.exe` does not expand
-globs at all; and a bare directory argument such as `node --test tests` fails outright, because
-positional arguments are resolved as module paths. Both suites bind an **ephemeral** port by
-passing `0` to `listen`, so `npm test` passes whether or not a server already holds port 3000.
+pattern itself — a capability it gained in Node 21, which is why the supported runtime floor
+above governs `npm test` as much as it governs security — so a suite added later under `tests/`
+is discovered with no manifest edit; quoting keeps the shell out of the expansion, which matters
+because `cmd.exe` does not expand globs at all; and a bare directory argument such as
+`node --test tests` fails outright, because positional arguments are resolved as module paths.
+Both suites bind an **ephemeral** port by passing `0` to `listen`, so `npm test` passes whether
+or not a server already holds port 3000.
 
 ## Rules
 
