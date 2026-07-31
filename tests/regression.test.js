@@ -104,16 +104,33 @@ describe('header fingerprint parity (F-006-RQ-003)', () => {
 });
 
 describe('HEAD semantics (decision A3)', () => {
-  // The root route serves GET, and HEAD is derived from it, so a bodiless probe of the
-  // same resource must still succeed. Status is the whole contract here: a HEAD reply
-  // has no body to inspect by definition, and its representation metadata is a
-  // property of the emitter rather than of this route, so asserting more would couple
-  // this lock to an implementation detail it does not own. Draining the (empty) body
-  // releases the connection; its value is deliberately not asserted.
+  // Both routes serve GET, and HEAD is derived from them, so a bodiless probe of either
+  // resource must still succeed. Draining the (empty) body releases the connection; its
+  // value is deliberately not asserted, because a HEAD reply has no body by definition.
   test('HEAD / responds with status 200', async () => {
     const response = await fetch(`${baseUrl}/`, { method: 'HEAD' });
     await response.text();
     assert.equal(response.status, 200);
+  });
+
+  // Content-Length is ABSENT on a HEAD reply, and that absence is the contract rather
+  // than an oversight: the shared emitter sets Content-Type and nothing else, so the
+  // header is whatever Node derives from the bytes actually sent - 14 or 13 on a GET,
+  // and none at all on a bodiless HEAD. The pre-Express server behaved identically
+  // because it ran the same three statements, so asserting the header is missing is what
+  // locks byte-exact parity; forcing a representation length back in would add a header
+  // the baseline never sent on this method.
+  test('HEAD / omits Content-Length entirely', async () => {
+    const response = await fetch(`${baseUrl}/`, { method: 'HEAD' });
+    await response.text();
+    assert.equal(response.headers.get('content-length'), null);
+  });
+
+  test('HEAD /good-evening responds with status 200 and omits Content-Length', async () => {
+    const response = await fetch(`${baseUrl}/good-evening`, { method: 'HEAD' });
+    await response.text();
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('content-length'), null);
   });
 });
 
@@ -137,4 +154,24 @@ describe('intentional behavioural deltas', () => {
     assert.equal(response.headers.get('content-type'), MEDIA_TYPE);
     assert.equal(body, NOT_FOUND_BODY);
   });
+
+  // OPTIONS is the one unsupported method the routing engine will answer BY ITSELF if
+  // left alone: on a path it can match, it replies 200 with an Allow list and a nosniff
+  // header - a status this system does not serve on a method it does not serve, carrying
+  // two headers the baseline never sent. Each feature router suppresses that by declaring
+  // an OPTIONS handler that declines, which is invisible in the source unless something
+  // asserts it, so this lock exists to stop a well-meaning cleanup of an apparently
+  // pointless handler from silently reopening the hole. Both declared paths are checked
+  // because the suppression is per route, not global.
+  for (const path of ['/', '/good-evening']) {
+    test(`OPTIONS ${path} returns 404 plain text with no Allow or nosniff header`, async () => {
+      const response = await fetch(`${baseUrl}${path}`, { method: 'OPTIONS' });
+      const body = await response.text();
+      assert.equal(response.status, 404);
+      assert.equal(response.headers.get('content-type'), MEDIA_TYPE);
+      assert.equal(body, NOT_FOUND_BODY);
+      assert.equal(response.headers.get('allow'), null);
+      assert.equal(response.headers.get('x-content-type-options'), null);
+    });
+  }
 });

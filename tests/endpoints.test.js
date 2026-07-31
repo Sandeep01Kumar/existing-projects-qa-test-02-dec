@@ -1,7 +1,10 @@
 const { after, before, describe, test } = require('node:test');
 const assert = require('node:assert/strict');
+const express = require('express');
 
 const createApp = require('../src/app');
+const notFound = require('../src/middleware/notFound');
+const errorHandler = require('../src/middleware/errorHandler');
 
 // Define expected wire literals independently so implementation changes cannot make
 // the assertions tautological.
@@ -146,17 +149,28 @@ describe('unmatched route (F-008-RQ-001)', () => {
 // The failure has to be injected: both endpoints write a constant string with no I/O and
 // nothing to throw on, and an error sink that is never executed is an unproven claim -
 // it could answer with the wrong status, the wrong media type, or the framework's
-// default HTML page while every test above still passed. The flows go through the
-// factory because mounting only ever APPENDS: a flow added to an already-composed
-// application would sit behind the route-miss handler and never run, so only one handed
-// to the factory lands ahead of the terminal pair where the error sink has to answer it.
+// default HTML page while every test above still passed.
+//
+// The fixture is therefore assembled HERE, on the test side of the boundary, instead of
+// widening the production factory to accept injected flows. createApp() composes one
+// fixed pipeline and takes no arguments, and it must stay that way: the shape of the
+// running server is a contract, not a parameter. What this fixture does mount is the
+// REAL notFound and errorHandler modules - the very objects the running server mounts -
+// so the assertions below are about the project's terminal pair rather than a stand-in.
+// No mock, no stub, no patched framework internals, and no dependency the project does
+// not already carry.
+//
+// The fixture reproduces production's ordering constraints because both are what is
+// under test: the error sink answers only while it is mounted last, and the route-miss
+// flow has to sit ahead of it so an unclaimed path proves the failing flows decline
+// rather than hijack the pipeline. The two header-parity settings are applied for the
+// same reason the running server applies them - a fixture that leaked ETag or
+// X-Powered-By would weaken the assertions instead of sharpening them.
 //
 // Both failure modes the requirement names are covered - a rejected promise, which this
 // framework's major line forwards to error middleware automatically, and a synchronous
-// throw. Each is scoped to its own path so one server hosts both and every other path on
-// it stays untouched, which is why the flows call next() rather than short-circuiting.
-// No mock, no stub, no patched framework internals, and no dependency the suites above
-// do not already use.
+// throw. Each is scoped to its own path so one fixture hosts both and every other path
+// on it stays untouched, which is why the flows call next() rather than short-circuiting.
 //
 // The three-parameter shape is structural: the framework passes request, response and
 // continuation positionally, so next has to be third, and a fourth parameter would make
@@ -164,6 +178,7 @@ describe('unmatched route (F-008-RQ-001)', () => {
 // though neither flow ever writes a response - only the error sink does.
 const REJECTED_PROMISE_PATH = '/rejected-promise';
 const THROWN_ERROR_PATH = '/thrown-error';
+const UNCLAIMED_PATH = '/neither-flow-claims-this';
 
 const rejectingFlow = (req, res, next) => {
   if (req.path === REJECTED_PROMISE_PATH) {
@@ -181,15 +196,29 @@ const throwingFlow = (req, res, next) => {
   next();
 };
 
+const createFailingApp = () => {
+  const app = express();
+
+  app.disable('x-powered-by');
+  app.set('etag', false);
+
+  app.use(rejectingFlow);
+  app.use(throwingFlow);
+  app.use(notFound);
+  app.use(errorHandler);
+
+  return app;
+};
+
 describe('failed request (F-008-RQ-002)', () => {
-  // A second listener with its own lifecycle, so the suites above keep exercising a
-  // pipeline composed exactly as the running server composes it.
+  // A second listener with its own lifecycle, so the suites above keep exercising the
+  // production pipeline untouched by this fixture.
   let failingServer;
   let failingSockets;
   let failingBaseUrl;
 
   before(async () => {
-    failingServer = createApp([rejectingFlow, throwingFlow]).listen(0, '127.0.0.1');
+    failingServer = createFailingApp().listen(0, '127.0.0.1');
     failingSockets = trackConnections(failingServer);
     await new Promise((resolve, reject) => {
       failingServer.once('listening', resolve);
@@ -230,17 +259,15 @@ describe('failed request (F-008-RQ-002)', () => {
     assert.equal(body, INTERNAL_ERROR_BODY);
   });
 
-  // Without this, a passing 500 could be masking a fixture that hijacks the whole
-  // pipeline, and the assertions above would prove nothing about the routes.
-  test('the injected flows leave every other path untouched', async () => {
-    const helloResponse = await fetch(`${failingBaseUrl}/`);
-    const helloBody = await helloResponse.text();
-    assert.equal(helloResponse.status, 200);
-    assert.equal(helloBody, HELLO_BODY);
-
-    const missResponse = await fetch(`${failingBaseUrl}/nope`);
-    const missBody = await missResponse.text();
-    assert.equal(missResponse.status, 404);
-    assert.equal(missBody, NOT_FOUND_BODY);
+  // Without this, a passing 500 could be masking a fixture that hijacks every request,
+  // and the two assertions above would prove nothing about which handler answered. A
+  // path neither flow claims has to travel the whole fixture and land on the route-miss
+  // handler, which is only possible if both flows genuinely called next().
+  test('the injected flows decline every path they do not claim', async () => {
+    const response = await fetch(`${failingBaseUrl}${UNCLAIMED_PATH}`);
+    const body = await response.text();
+    assert.equal(response.status, 404);
+    assert.equal(response.headers.get('content-type'), MEDIA_TYPE);
+    assert.equal(body, NOT_FOUND_BODY);
   });
 });
