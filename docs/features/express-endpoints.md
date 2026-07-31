@@ -540,9 +540,9 @@ Node 22.12.0 or newer (see the support policy immediately above), and a free TCP
 run the server (the test suite does not need it).
 
 ```bash
-npm ci        # restores the exact 67-package tree from the committed lockfile
-npm start     # node server.js
-npm test      # node --test "tests/**/*.test.js"
+npm ci
+npm start
+npm test
 ```
 
 The test command is a **quoted glob**, and each part of that matters. The runner expands the

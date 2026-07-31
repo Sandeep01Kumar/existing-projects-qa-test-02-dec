@@ -113,13 +113,6 @@ describe('HEAD semantics (decision A3)', () => {
     assert.equal(response.status, 200);
   });
 
-  // Content-Length on a HEAD reply is the length of the representation the resource WOULD
-  // have returned - 14 on / and 13 on /good-evening, the same values the matching GET
-  // reports - which is the whole point of asking for the metadata without the body. It has
-  // to be locked here because it is the one header the runtime CANNOT derive on this
-  // method: no body is sent, so there is nothing to measure, and the emitter sets it
-  // explicitly for HEAD only. Delete that branch and both assertions below fail rather
-  // than the contract silently degrading to a reply that reports no length at all.
   test('HEAD / reports the representation length 14', async () => {
     const response = await fetch(`${baseUrl}/`, { method: 'HEAD' });
     await response.text();
@@ -135,7 +128,6 @@ describe('HEAD semantics (decision A3)', () => {
 });
 
 describe('intentional behavioural deltas', () => {
-  // POST is unsupported and must reach the plain-text route-miss handler.
   test('POST / returns 404 with a plain-text body', async () => {
     const response = await fetch(`${baseUrl}/`, { method: 'POST' });
     const body = await response.text();
@@ -155,15 +147,7 @@ describe('intentional behavioural deltas', () => {
     assert.equal(body, NOT_FOUND_BODY);
   });
 
-  // The declared surface is exactly two paths, so every near-miss spelling of them has to fail
-  // like any other unknown path. Left at its defaults the router would treat case as
-  // insignificant and a trailing slash as optional, quietly serving `/GOOD-EVENING`,
-  // `/Good-Evening`, `/good-evening/` and `//` as though they were declared resources - aliases
-  // no documentation lists and nothing else would have caught, because each one still returns a
-  // valid-looking 200. Both routers therefore run with `caseSensitive` and `strict` matching,
-  // and these locks are what stop a future edit from dropping either option: HEAD is checked
-  // alongside GET because HEAD is derived from the same route, so an alias would resurface on
-  // both methods at once.
+  // Router defaults accept case/trailing-slash aliases; lock exact GET/HEAD paths to the 404 contract.
   for (const path of ['//', '/good-evening/', '/GOOD-EVENING', '/Good-Evening']) {
     for (const method of ['GET', 'HEAD']) {
       test(`${method} ${path} is not an alias and returns the plain-text 404`, async () => {
@@ -178,14 +162,7 @@ describe('intentional behavioural deltas', () => {
     }
   }
 
-  // OPTIONS is the one unsupported method the routing engine will answer BY ITSELF if
-  // left alone: on a path it can match, it replies 200 with an Allow list and a nosniff
-  // header - a status this system does not serve on a method it does not serve, carrying
-  // two headers the baseline never sent. Each feature router suppresses that by declaring
-  // an OPTIONS handler that declines, which is invisible in the source unless something
-  // asserts it, so this lock exists to stop a well-meaning cleanup of an apparently
-  // pointless handler from silently reopening the hole. Both declared paths are checked
-  // because the suppression is per route, not global.
+  // Keep explicit route-level OPTIONS handlers from regressing to Express's automatic 200/Allow response.
   for (const path of ['/', '/good-evening']) {
     test(`OPTIONS ${path} returns 404 plain text with no Allow or nosniff header`, async () => {
       const response = await fetch(`${baseUrl}${path}`, { method: 'OPTIONS' });

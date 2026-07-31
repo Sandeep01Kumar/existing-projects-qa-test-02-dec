@@ -146,36 +146,10 @@ describe('unmatched route (F-008-RQ-001)', () => {
   });
 });
 
-// The failure has to be injected: both endpoints write a constant string with no I/O and
-// nothing to throw on, and an error sink that is never executed is an unproven claim -
-// it could answer with the wrong status, the wrong media type, or the framework's
-// default HTML page while every test above still passed.
-//
-// The fixture is therefore assembled HERE, on the test side of the boundary, instead of
-// widening the production factory to accept injected flows. createApp() composes one
-// fixed pipeline and takes no arguments, and it must stay that way: the shape of the
-// running server is a contract, not a parameter. What this fixture does mount is the
-// REAL notFound and errorHandler modules - the very objects the running server mounts -
-// so the assertions below are about the project's terminal pair rather than a stand-in.
-// No mock, no stub, no patched framework internals, and no dependency the project does
-// not already carry.
-//
-// The fixture reproduces production's ordering constraints because both are what is
-// under test: the error sink answers only while it is mounted last, and the route-miss
-// flow has to sit ahead of it so an unclaimed path proves the failing flows decline
-// rather than hijack the pipeline. The two header-parity settings are applied for the
-// same reason the running server applies them - a fixture that leaked ETag or
-// X-Powered-By would weaken the assertions instead of sharpening them.
-//
-// Both failure modes the requirement names are covered - a rejected promise, which this
-// framework's major line forwards to error middleware automatically, and a synchronous
-// throw. Each is scoped to its own path so one fixture hosts both and every other path
-// on it stays untouched, which is why the flows call next() rather than short-circuiting.
-//
-// The three-parameter shape is structural: the framework passes request, response and
-// continuation positionally, so next has to be third, and a fourth parameter would make
-// the framework read the function as an error handler instead. Hence res is declared even
-// though neither flow ever writes a response - only the error sink does.
+// Mounts the REAL notFound and errorHandler without widening zero-argument createApp.
+// The failing flows precede that terminal pair, because the sink only answers from last
+// position. Three parameters keep them regular middleware rather than error handlers, and
+// a synchronous throw and a rejected promise reach the sink by different paths.
 const REJECTED_PROMISE_PATH = '/rejected-promise';
 const THROWN_ERROR_PATH = '/thrown-error';
 const UNCLAIMED_PATH = '/neither-flow-claims-this';
