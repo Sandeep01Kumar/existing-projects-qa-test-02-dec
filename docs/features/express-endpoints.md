@@ -612,4 +612,3 @@ deliberately failing middleware to the factory so the error sink has something r
 answer, and asserts the identical 500 reply for a synchronous throw and for a rejected
 promise. Run the whole suite with the test command in the
 [README](../../README.md).
-
