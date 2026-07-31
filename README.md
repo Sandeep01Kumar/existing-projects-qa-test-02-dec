@@ -57,7 +57,8 @@ Server running at http://127.0.0.1:3000/
 |--------|------|--------|--------------|------|-------|
 | GET | `/` | 200 | `text/plain` | `Hello, World!\n` | 14 |
 | GET | `/good-evening` | 200 | `text/plain` | `Good evening\n` | 13 |
-| HEAD | `/` or `/good-evening` | 200 | `text/plain` | (no body, derived from GET) | — |
+| HEAD | `/` | 200 | `text/plain` | (no body, derived from GET) | 14 |
+| HEAD | `/good-evening` | 200 | `text/plain` | (no body, derived from GET) | 13 |
 | any | any other path | 404 | `text/plain` | `Not Found\n` | 10 |
 | any | (unhandled error) | 500 | `text/plain` | `Internal Server Error\n` | 22 |
 
@@ -70,9 +71,12 @@ aliases — each one is "any other path" and returns the same `404`. The table a
 the complete list of requests that succeed, and it is not a subset of what the server actually
 serves.
 
-The dash in the HEAD row is deliberate and measured: a HEAD reply carries no body, so Node
-sends no `Content-Length` at all. The header is genuinely absent rather than merely
-undocumented, and the pre-Express server behaved identically.
+The byte count in the HEAD rows is the length of the representation each resource *would*
+have returned, so `HEAD` reports the same `14` and `13` as the matching `GET` while sending
+no body — that is what a HEAD request is for. It is the one header the runtime cannot work
+out on this method, because there are no bytes to measure, so the shared emitter sets it
+explicitly for HEAD and only for HEAD. A `GET` response is untouched: its headers, their
+values and their order are exactly what the pre-Express server emitted.
 
 Quick verification:
 

@@ -113,24 +113,24 @@ describe('HEAD semantics (decision A3)', () => {
     assert.equal(response.status, 200);
   });
 
-  // Content-Length is ABSENT on a HEAD reply, and that absence is the contract rather
-  // than an oversight: the shared emitter sets Content-Type and nothing else, so the
-  // header is whatever Node derives from the bytes actually sent - 14 or 13 on a GET,
-  // and none at all on a bodiless HEAD. The pre-Express server behaved identically
-  // because it ran the same three statements, so asserting the header is missing is what
-  // locks byte-exact parity; forcing a representation length back in would add a header
-  // the baseline never sent on this method.
-  test('HEAD / omits Content-Length entirely', async () => {
+  // Content-Length on a HEAD reply is the length of the representation the resource WOULD
+  // have returned - 14 on / and 13 on /good-evening, the same values the matching GET
+  // reports - which is the whole point of asking for the metadata without the body. It has
+  // to be locked here because it is the one header the runtime CANNOT derive on this
+  // method: no body is sent, so there is nothing to measure, and the emitter sets it
+  // explicitly for HEAD only. Delete that branch and both assertions below fail rather
+  // than the contract silently degrading to a reply that reports no length at all.
+  test('HEAD / reports the representation length 14', async () => {
     const response = await fetch(`${baseUrl}/`, { method: 'HEAD' });
     await response.text();
-    assert.equal(response.headers.get('content-length'), null);
+    assert.equal(response.headers.get('content-length'), '14');
   });
 
-  test('HEAD /good-evening responds with status 200 and omits Content-Length', async () => {
+  test('HEAD /good-evening responds with status 200 and reports the representation length 13', async () => {
     const response = await fetch(`${baseUrl}/good-evening`, { method: 'HEAD' });
     await response.text();
     assert.equal(response.status, 200);
-    assert.equal(response.headers.get('content-length'), null);
+    assert.equal(response.headers.get('content-length'), '13');
   });
 });
 

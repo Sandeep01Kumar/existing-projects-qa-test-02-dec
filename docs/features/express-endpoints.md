@@ -18,9 +18,9 @@ socket read, and the bodies from a byte dump so that trailing newlines are visib
 | Method | Path | Status | Content-Type | Body | Content-Length |
 |--------|------|--------|--------------|------|----------------|
 | GET | `/` | 200 | `text/plain` | `Hello, World!\n` | 14 |
-| HEAD | `/` | 200 | `text/plain` | (no body, derived from GET) | — (see note) |
+| HEAD | `/` | 200 | `text/plain` | (no body, derived from GET) | 14 (see note) |
 | GET | `/good-evening` | 200 | `text/plain` | `Good evening\n` | 13 |
-| HEAD | `/good-evening` | 200 | `text/plain` | (no body, derived from GET) | — (see note) |
+| HEAD | `/good-evening` | 200 | `text/plain` | (no body, derived from GET) | 13 (see note) |
 | any | any other path | 404 | `text/plain` | `Not Found\n` | 10 |
 | any | (unhandled error) | 500 | `text/plain` | `Internal Server Error\n` | 22 |
 
@@ -64,28 +64,35 @@ not be written for. `tests/regression.test.js` locks all four aliases for **both
 because HEAD is derived from the same route and an alias would otherwise resurface on both
 methods at once.
 
-### Why the HEAD rows carry no Content-Length
+### Why the HEAD rows report 14 and 13 with no body
 
-The dash is deliberate and measured, not an omission. A HEAD reply sends no body, so the
-runtime has nothing to measure and emits no `Content-Length` header at all. Measured on the
-running server:
+`Content-Length` on a HEAD reply is the length of the representation the resource *would*
+have returned, not a count of bytes on the wire — asking for a resource's metadata without
+its body is the entire purpose of the method. So `HEAD /` reports the same `14` as `GET /`,
+and `HEAD /good-evening` the same `13`, while neither sends a byte of body.
+
+It is the one header the runtime cannot work out on this method. Node strips the body for a
+HEAD request, so `res.end(body)` gives it nothing to measure and it emits no
+`Content-Length` at all unless one is set explicitly. The shared emitter therefore sets it
+for HEAD, and only for HEAD. Measured on the running server from a raw socket, so both
+presence and ordering are visible:
 
 ```text
-GET  / -> Content-Type: text/plain, Date, Connection: keep-alive, Keep-Alive: timeout=5, Content-Length: 14
-HEAD / -> Content-Type: text/plain, Date, Connection: keep-alive, Keep-Alive: timeout=5
+GET  /              -> Content-Type: text/plain, Date, Connection: keep-alive, Keep-Alive: timeout=5, Content-Length: 14
+HEAD /              -> Content-Type: text/plain, Content-Length: 14, Date, Connection: keep-alive, Keep-Alive: timeout=5
+HEAD /good-evening  -> Content-Type: text/plain, Content-Length: 13, Date, Connection: keep-alive, Keep-Alive: timeout=5
 ```
 
-The header is genuinely absent on the wire, so a representation length of `14` or `13` is
-**not observable** on a HEAD response and must never be documented as though it were. The
-pre-Express server behaved identically, because it ran the very same three statements that
-the shared emitter now runs; a side-by-side run of both servers in one process reports
-identical header-name sets for GET and identical header-name sets for HEAD. Forcing a
-representation length back in would therefore add a header the baseline never sent, on the
-one method where it cannot be derived.
+Two consequences of confining that to one branch are worth spelling out. A `GET` response is
+**untouched** — the same header names, the same values and the same order the pre-Express
+server produced, with `Content-Length` appended last by the runtime rather than set by hand.
+And on `HEAD` the value is measured from the very constant the matching `GET` would have
+sent, so the two methods cannot disagree about the size of the resource: there is one
+literal per route and one emitter reading it.
 
 `tests/regression.test.js` locks this: it asserts `HEAD /` and `HEAD /good-evening` return
-status `200` **and** that `Content-Length` is absent, so the behaviour cannot drift back
-silently.
+status `200` **and** report `Content-Length` `14` and `13`, so removing the branch fails the
+suite instead of silently degrading both routes to a reply that reports no length at all.
 
 ### A note on `Hello world`
 
@@ -97,8 +104,8 @@ only to explain where the shorter phrasing comes from; it is not a response body
 
 ## Response headers
 
-On a **200** response the full header block is identical to the pre-Express server's, in the
-same order, measured from a raw socket read:
+On a body-bearing response the full header block is identical to the pre-Express server's, in
+the same order, measured from a raw socket read:
 
 ```text
 HTTP/1.1 200 OK
@@ -121,8 +128,13 @@ The last two are the headers the framework's default HTML error page would have 
 the 404 and 500 paths, alongside a `text/html` body this system has never produced. Both
 terminal handlers deliberately override that default, which is why neither header nor that
 media type can appear. A header-name set comparison against the baseline server, excluding
-the volatile `Date` value, reports identical sets. Together these satisfy the header and
-fingerprint parity requirement.
+the volatile `Date` value, reports identical sets on every body-bearing response. Together
+these satisfy the header and fingerprint parity requirement.
+
+`HEAD` is the single documented departure, and it adds nothing to the fingerprint: the
+representation length the contract requires is stated explicitly there, because a reply with
+no body gives the runtime nothing to measure. See "Why the HEAD rows report 14 and 13 with no
+body" above.
 
 ### Why the framework's response helpers are prohibited
 
@@ -247,16 +259,17 @@ listening socket's local address was read directly and reports `127.0.0.1:3000` 
 wildcard address, so loopback isolation is measured rather than assumed.
 
 `tests/regression.test.js` exists specifically to hold this tier in place — the exact content
-lengths on GET, the absence of both added headers, the HEAD status and its absent
-`Content-Length`, and both 404 deltas — so a future change cannot quietly reintroduce drift.
+lengths on GET, the absence of both added headers, the HEAD status together with its
+representation lengths of `14` and `13`, and both 404 deltas — so a future change cannot
+quietly reintroduce drift.
 
 ## Architecture
 
 ### The choke point
 
 Every response — success, route miss and error alike — leaves through one function,
-`sendText(res, statusCode, body)` in `src/lib/textResponse.js`, which performs exactly the
-three statements relocated verbatim from the pre-Express handler:
+`sendText(res, statusCode, body)` in `src/lib/textResponse.js`, built on the three statements
+relocated verbatim from the pre-Express handler:
 
 ```javascript
 res.statusCode = statusCode;
@@ -266,8 +279,11 @@ res.end(body);
 
 That single choke point is why the content type cannot drift, and it is the structural reason
 the parity claim above holds rather than depending on each handler being written carefully.
-It sets **only** `Content-Type`; `Content-Length` arrives free from the runtime's `res.end`
-and is never set by hand, which is exactly why a bodiless HEAD reply carries none.
+`Content-Type` is the only header set unconditionally: on a body-bearing reply
+`Content-Length` arrives free from the runtime's `res.end` and is never set by hand, which is
+what keeps the `GET` header block and its ordering identical to the baseline's. The single
+exception is the HEAD branch described above — the one case where the runtime has no bytes to
+measure and the representation length has to be stated explicitly.
 
 Relocation rather than rewriting is what makes byte-exact parity provable: the statements were
 moved, not retyped.
@@ -510,18 +526,27 @@ or not a server already holds port 3000.
 
 ## Rules
 
-Two user-specified rules apply to this project.
+Two user-specified rules apply to this project. Both are summarized below in the order they
+appear in the rules document. These are **summaries of the obligations each rule imposes and
+how this project discharges them, not transcriptions** — the authoritative full text of every
+rule lives in the rules document itself, which is where a reader should go for the wording.
 
-### Rule — "Ajit_New Product"
+### Rule 1 — "QA-rules-02-june"
 
-The rule's own text, reproduced verbatim so that nothing about it is paraphrased away:
+**Obligations: none.** The rule is present and counted among the two that apply, but its body
+is empty: no directive, no constraint, no coding standard, no mandated artifact. Nothing in
+this project traces to it, and nothing has been inferred or back-filled from its name. In the
+absence of a directive the work is held to enterprise-standard practice instead, which for
+this document means every stated number verified against live output, no aspirational claims,
+and deltas disclosed rather than hidden.
 
-*"Create a product in Python clearly separating each flow and feature. Ensure the performance
-of the application is not impacted by this code."*
+### Rule 2 — "Ajit_New Product"
 
-That quotation is a record of the rule, not an instruction to any reader: nothing in this
-project prescribes, installs, or documents any toolchain other than Node.js and npm, and the
-only prerequisites are the ones the README lists.
+**Obligations: three.** That the product be created in Python; that each flow and feature be
+clearly separated; and that the performance of the application not be impacted by the added
+code. Each is dispositioned below. Nothing in this project prescribes, installs, or documents
+any toolchain other than Node.js and npm, and the only prerequisites are the ones the README
+lists.
 
 **The language clause is set aside, explicitly rather than silently.** This project is
 implemented in JavaScript on Node.js with `express@5.2.1`, on four independent grounds:
@@ -551,11 +576,3 @@ feature area, one row per endpoint.
 
 **The performance clause is honored and measured** — see the section above, including the
 disclosed memory increase.
-
-### Rule — "QA-rules-02-june"
-
-Its body is empty. The rule is present and counted among the two that apply, but it carries no
-directive, no constraint, no coding standard and no mandated artifact, so nothing in this
-document traces to it and nothing has been inferred from its name. In its absence the work is
-held to enterprise-standard documentation practice instead: every stated number verified
-against live output, no aspirational claims, and deltas disclosed rather than hidden.
