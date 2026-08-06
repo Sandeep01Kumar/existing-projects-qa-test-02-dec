@@ -27,7 +27,12 @@ if (require.main === module) {
   // Express reports a failed bind through this same callback, so `err` has to be
   // checked: unchecked, a port clash would log success and exit 0 with nothing bound.
   app.listen(port, hostname, (err) => {
-    if (err) throw err;
+    if (err) {
+      console.error(`Error: ${err.message}`);
+      process.exitCode = 1;
+      return;
+    }
+
     console.log(`Server running at http://${hostname}:${port}/`);
   });
 }
