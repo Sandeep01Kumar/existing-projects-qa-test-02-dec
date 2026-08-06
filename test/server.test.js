@@ -1,38 +1,21 @@
-/**
- * Smoke suite for the Express server in ../server.js — the executable form of
- * this tutorial's acceptance criteria: the original greeting still works, the
- * new greeting works, and an unmatched path is a plain-text 404.
- *
- * Everything here comes from Node itself — `node:test`, `node:assert/strict`
- * and the global `fetch` — so the project needs no devDependencies. Run it with
- * `npm test`, which is a bare `node --test`, on Node 18.8.0 or newer: that is
- * the release that introduced the top-level hooks used below.
- *
- * One shared server serves the whole suite: the `before` hook binds it once and
- * the `after` hook closes it once. `require('../server.js')` returns the app
- * without opening a socket, because server.js only calls `listen` when it is
- * the process entry point.
- */
-
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const app = require('../server.js');
 
-// Shared by the hooks and all three tests.
 let server;
 let baseUrl;
 
 before(async () => {
+  // Let the kernel choose a free port to avoid collisions with another server process.
+  server = app.listen(0, '127.0.0.1');
+
   await new Promise((resolve, reject) => {
-    // Port 0 lets the kernel pick a free port, so the suite never collides with
-    // an already-running copy of the server. `listen` reports a failed bind
-    // through this same callback, so reject on `err` instead of resolving and
-    // failing later on with the real cause lost.
-    server = app.listen(0, '127.0.0.1', (err) => (err ? reject(err) : resolve()));
+    server.once('listening', resolve);
+    server.once('error', reject);
   });
 
-  // Reading the port is safe only after the listening callback above fired.
+  // Reading the port is safe only after the `listening` event above.
   baseUrl = `http://127.0.0.1:${server.address().port}`;
 });
 
@@ -51,7 +34,7 @@ test('GET / returns the preserved "Hello, World!" greeting as plain text', async
 
   assert.equal(res.status, 200);
   assert.ok(contentType.startsWith('text/plain'), `bad Content-Type: ${contentType || '(absent)'}`);
-  // server.js disables x-powered-by, so the framework is never advertised.
+  // Guard against exposing the framework through the X-Powered-By header.
   assert.equal(res.headers.get('x-powered-by'), null);
   // Byte-exact: comma, capital W, exclamation mark, trailing newline. 14 bytes.
   assert.equal(await res.text(), 'Hello, World!\n');

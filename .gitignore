@@ -1,6 +1,3 @@
-# Installed dependency tree; reproducible at any time from package-lock.json.
 node_modules/
-# npm crash logs.
 npm-debug.log*
-# Local environment overrides (defensive: this project uses none).
 .env

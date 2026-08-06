@@ -7,12 +7,11 @@ const port = 3000;
 // Free hardening: do not advertise the framework in every response.
 app.disable('x-powered-by');
 
-// Preserved greeting: the response bytes match the pre-Express server exactly.
+// Keep this 14-byte body unchanged, including punctuation and the trailing newline.
 app.get('/', (req, res) => {
   res.status(200).type('text/plain').send('Hello, World!\n');
 });
 
-// Second endpoint, added alongside the original greeting.
 app.get('/good-evening', (req, res) => {
   res.status(200).type('text/plain').send('Good evening\n');
 });
