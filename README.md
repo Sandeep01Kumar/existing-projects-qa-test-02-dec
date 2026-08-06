@@ -3,7 +3,7 @@ test project for backprop integration. Do not touch!
 
 ## Getting started
 
-Requires Node.js 18 or higher.
+Requires Node.js 18.8.0 or higher, which is what `engines.node` in `package.json` declares: Express 5 itself needs 18, and the built-in test runner behind `npm test` needs 18.8.0 for the top-level hooks the suite uses.
 
 ```bash
 npm install   # install dependencies (Express)
