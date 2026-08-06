@@ -3,7 +3,7 @@ test project for backprop integration. Do not touch!
 
 ## Getting started
 
-Requires Node.js 18 or higher — Express 5's declared floor, mirrored by `engines.node` in `package.json`.
+Requires Node.js 18.8 or higher, mirrored by `engines.node` in `package.json`. Express 5's own floor is 18; `npm test` raises it to 18.8, the release where Node's built-in test runner began exporting the `before`/`after` hooks the smoke suite uses.
 
 ```bash
 npm install   # install dependencies (Express)
