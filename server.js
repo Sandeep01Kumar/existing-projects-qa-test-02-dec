@@ -24,7 +24,10 @@ app.use((req, res) => {
 
 // Bind only when run directly, so the app can be imported without opening a port.
 if (require.main === module) {
-  app.listen(port, hostname, () => {
+  // Express reports a failed bind through this same callback, so `err` has to be
+  // checked: unchecked, a port clash would log success and exit 0 with nothing bound.
+  app.listen(port, hostname, (err) => {
+    if (err) throw err;
     console.log(`Server running at http://${hostname}:${port}/`);
   });
 }

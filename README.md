@@ -3,7 +3,7 @@ test project for backprop integration. Do not touch!
 
 ## Getting started
 
-Requires Node.js 18.8.0 or higher, which is what `engines.node` in `package.json` declares: Express 5 itself needs 18, and the built-in test runner behind `npm test` needs 18.8.0 for the top-level hooks the suite uses.
+Requires Node.js 18 or higher — Express 5's declared floor, mirrored by `engines.node` in `package.json`.
 
 ```bash
 npm install   # install dependencies (Express)
@@ -20,4 +20,4 @@ Base URL: `http://127.0.0.1:3000`
 | `GET` | `/` | `Hello, World!` |
 | `GET` | `/good-evening` | `Good evening` |
 
-Responses are `text/plain; charset=utf-8` and end with a trailing newline, so `/` returns 14 bytes and `/good-evening` returns 13. Any other path returns `404` with the plain-text body `Not Found`.
+Responses are `text/plain; charset=utf-8` and end with a trailing newline, so `/` returns 14 bytes and `/good-evening` returns 13. Only `GET` is served, plus `HEAD`, which Express answers from the same two routes; any unmatched path or method returns `404` with the plain-text body `Not Found`.

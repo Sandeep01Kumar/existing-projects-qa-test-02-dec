@@ -1,5 +1,6 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
+const { once } = require('node:events');
 
 const app = require('../server.js');
 
@@ -10,16 +11,19 @@ before(async () => {
   // Let the kernel choose a free port to avoid collisions with another server process.
   server = app.listen(0, '127.0.0.1');
 
-  await new Promise((resolve, reject) => {
-    server.once('listening', resolve);
-    server.once('error', reject);
-  });
+  // `once` rejects with the real cause if the bind fails instead of resolving, and it
+  // detaches both listeners it attached once settled, leaving nothing on the server.
+  await once(server, 'listening');
 
   // Reading the port is safe only after the `listening` event above.
   baseUrl = `http://127.0.0.1:${server.address().port}`;
 });
 
 after(async () => {
+  // Nothing to release if the bind above never produced a server, and returning here
+  // keeps a failed `before` hook reporting its own cause rather than a TypeError.
+  if (!server) return;
+
   // Release the port so the test process exits on its own instead of hanging.
   await new Promise((resolve, reject) => {
     server.close((err) => (err ? reject(err) : resolve()));
